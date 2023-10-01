@@ -10,10 +10,10 @@ Enjoy beauty of R plots!
 
 -- 
 Work on libraries: 
-  tidyverse
-  ggrepel
-  viridis
-  corrplot
+  - tidyverse
+  - ggrepel
+  - viridis
+  - corrplot
   ggraph
   igraph
   circlize

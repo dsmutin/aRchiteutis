@@ -8,14 +8,14 @@ All manipulations to visualize data is avialable in "plots"
 
 Enjoy beauty of R plots!
 
--- 
+
 Work on libraries: 
   - tidyverse
   - ggrepel
   - viridis
   - corrplot
-  ggraph
-  igraph
-  circlize
-  factoextra
-  Rtsne
+  - ggraph
+  - igraph
+  - circlize
+  - factoextra
+  - Rtsne

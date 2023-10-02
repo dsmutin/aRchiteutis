@@ -2,6 +2,8 @@
 
 To run analysis you only need to work with file "pipeline.R"
 
+![изображение](https://github.com/dsmutin/aRchiteutis/assets/98605724/500712fc-da27-43c2-a153-7540d152bcf2)
+
 # Functions
 
 All functions for data preparation and their descriptions are avialable in "functions"
@@ -9,7 +11,7 @@ All manipulations to visualize data is avialable in "plots"
 
 Enjoy beauty of R plots!
 
-![изображение](https://github.com/dsmutin/aRchiteutis/assets/98605724/500712fc-da27-43c2-a153-7540d152bcf2)
+
 
 
 

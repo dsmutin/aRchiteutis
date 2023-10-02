@@ -9,7 +9,8 @@ All manipulations to visualize data is avialable in "plots"
 
 Enjoy beauty of R plots!
 
-![изображение](https://github.com/dsmutin/aRchiteutis/assets/98605724/6502f374-a271-470c-af4e-30b8ff531ba3)
+![изображение](https://github.com/dsmutin/aRchiteutis/assets/98605724/500712fc-da27-43c2-a153-7540d152bcf2)
+
 
 
 # Pipeline itself with description

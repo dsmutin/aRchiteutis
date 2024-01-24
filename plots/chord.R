@@ -1,40 +1,20 @@
-df2chord <- function(df, clade = F, k_means = 5, counts = F, log2_scale = F, 
-                     coenf_level = F, coenf, line_as_clusters = F, ...) {
-  
-  #operations with df
-  
-  if(clade != F) {
-    df <- df[df$clade == clade,]
-  }
-  
-  df <- df %>% df_untidy(counts = counts)
-  df[is.na(df)] <- 0
-  df <- df[,-1]
-  
-  row.names(df) -> rdf
-  ldfr <- length(rdf)
-  
-  if(log2_scale == T) {
-    df <- df + 1
-    df <- sapply(df, log2)
-    row.names(df) <- rdf
-  }
-  
-  df <- scale(df)
-  
-  #making cluster
-  clust_res <- df %>% dist %>% hclust(method = "ward.D2")
-  
-  groups <- cutree(clust_res, k=k_means)
-
-  df <- df[order(clust_res$order),]
-  df <- df[order(groups),]
-  groups <- groups[order(groups)]
-  
-  print("clusterization done")
+df2chord <- function(df, clade = F, k_means = 5, amount_from = "amount",
+                     coenf_level = F, coenf = "both", line_as_clusters = F, ...) {
   
   #making correlation
   df <- cor(t(df))
+  
+  df_order <- df %>% corrMatOrder(order = "hclust")
+
+  corhcl <- df %>% dist %>% hclust()
+  groups <- cutree(corhcl, k=k_means)
+  
+  df <- df[df_order, df_order]
+  groups <- groups[df_order]
+  
+  rdf <- colnames(df)
+  ldfr <- length(rdf)
+  
   
   #remove duplicated
   h_remove <- c()
@@ -47,7 +27,7 @@ df2chord <- function(df, clade = F, k_means = 5, counts = F, log2_scale = F,
   vertices <- pivot_longer(as.data.frame(df), cols = 1:ldfr)
   
   #add angle and hjust
-  angle <- 90 - 360 * 1:ldfr / ldfr
+  angle <- 90 - 360 * 0:(ldfr-1) / ldfr
   hjust <- ifelse(angle < -90, 1, 0)
   angle <- ifelse(angle < -90, angle+180, angle)
   
@@ -75,7 +55,7 @@ df2chord <- function(df, clade = F, k_means = 5, counts = F, log2_scale = F,
     ggraph(gg, layout = 'linear', circular = TRUE) + 
       geom_edge_arc(aes(alpha = (vals)^4, color = as.character(df_clust$group)), show.legend = F) +
       geom_node_point(aes(x = x*1.05, y=y*1.05, color = as.character(groups)), show.legend = F) +
-      geom_node_text(aes(x = x*1.1, y=y*1.1, label=name, angle = angle, hjust=hjust)) +
+      geom_node_text(aes(x = x*1.1, y=y*1.1, label=name, angle = angle, hjust=hjust, fontface = "italic")) +
       scale_color_manual(values = viridis(k_means)) +
       scale_edge_color_manual(values = viridis(k_means), na.value = "transparent") +
       scale_edge_alpha_continuous(range = c(0, 0.5), na.value = 0) +
@@ -98,9 +78,9 @@ df2chord <- function(df, clade = F, k_means = 5, counts = F, log2_scale = F,
     }
 
     ggraph(gg, layout = 'linear', circular = TRUE) + 
-      geom_edge_arc(aes(alpha = (vals)^4, color = vals), show.legend = F) +
+      geom_edge_arc(aes(alpha = (vals)^2, color = vals), show.legend = F) +
       geom_node_point(aes(x = x*1.05, y=y*1.05, color = as.character(groups)), show.legend = F) +
-      geom_node_text(aes(x = x*1.1, y=y*1.1, label=name, angle = angle, hjust=hjust)) +
+      geom_node_text(aes(x = x*1.1, y=y*1.1, label=name, angle = angle, hjust=hjust, fontface = "italic")) +
       scale_color_manual(values = viridis(k_means)) +
       scale_edge_color_gradient2(low="red", mid = "white", high="blue", na.value = "transparent") +
       scale_edge_alpha_continuous(range = c(0, 0.5)) +

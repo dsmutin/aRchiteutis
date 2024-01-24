@@ -1,34 +1,25 @@
-df2pca_sample <- function(df, clade = F, scale = T, ...) {
-  
-  if(clade != F) {
-    df <- df[df$clade == clade,]
-  }
-  
-  df <- df %>% df_untidy 
-  df[is.na(df)] <- 0
-  df <- df[,-1]
-  
+df2pca_sample <- function(df, scale = T, detect = F, detect2 = "other", ...) {
+
   res.pca <- prcomp(t(df), scale = scale)
   
-  fviz_pca_ind(res.pca,...) +
+  if (detect != F) {
+    col_list <- colnames(df) %>% str_detect(detect)
+    color_list <- col_list
+    color_list[col_list] <- detect
+    color_list[!col_list] <- detect2
+  }
+  
+  fviz_pca_ind(res.pca, col.ind = color_list, ...) +
     theme_minimal() +
     ggtitle("")
 }
 
 
-df2pca_sp <- function(df, clade = F, scale = T, ...) {
-  
-  if(clade != F) {
-    df <- df[df$clade == clade,]
-  }
-  
-  df <- df %>% df_untidy 
-  df[is.na(df)] <- 0
-  df <- df[,-1]
-  
+df2pca_sp <- function(df, scale = T, ...) {
+
   res.pca <- prcomp(t(df), scale = scale)
   
-  fviz_pca_var(res.pca,...) +
+  fviz_pca_var(res.pca, ...) +
     theme_minimal() +
     ggtitle("")
 }

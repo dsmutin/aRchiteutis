@@ -1,57 +1,53 @@
 df_untidy <- function (
     df, #result tibble from get_counts.R
-    
-    counts = T, #use counts or amount data
-    classified_only = F, #only if counts = F, get amount by classified data
-    drop_unclassified = F, #drop all unclasified levels
-    keep_sample_name = F #warning! if T translate legend to separated format in name of each column :(
+    clade = F,
+    amount_from = "amount",
+    top = F,
+    scale = F, #eval function, etc log2 or scale
+    drop_unclassified = F,
+    keep_sample_name = T #warning! if T translate legend to separated format in name of each column :(
     
     #get untidy table for base::heatmap or future processing
 ) {
-  res <- data.frame("taxa" = NA, "clade" = NA)
   
-  #i know that pivot_wider() is better but what else)
+  if(drop_unclassified) df <- df %>% df_tidy_drop_unclassified
   
-  #what column to transform in table
-  if (counts == T) {
-    df_column_add <- 4
-  } else {
-    if(classified_only == F) {
-      df_column_add <- 5
-    } else {
-      df_column_add <- 6
-    }
+  if(clade != F) {
+    df <- df[df$clade == clade,]
   }
   
-  for (fct in levels(df$sample)) {
-    df2 <- df[df$sample == fct, c(1,2,df_column_add)]
-    
-    #apply legend
-    if ((length(df[1,]) > 6 ) & (keep_sample_name == F)){
-      df2name <- df[df$sample == fct,][1,-c(1:6)]
-      df2name <- df2name %>% data.frame %>% sapply(as.character)  %>% unlist %>% paste(collapse = "_")
-      #ehh, TIBBLE)
-    } else {
-      df2name <- df2$sample[1] %>% as.character
-    }
-    
-    colnames(df2)[3] <- df2name
-    
-    res <- full_join(res, df2, by = c("taxa", "clade"))
+  if(!keep_sample_name) {
+    df$sample <- df[,c(7:length(df[1,]), 3)] %>% apply(1, str_c, collapse = "_")
   }
   
-  #rename rows
-  res <- res[-1,]
+  #edit duplicates
+  df <- df[,c("taxa", "sample", amount_from)]
+  colnames(df)[3] <- "N"
   
-  if(drop_unclassified == T) {
-    res_uncl <- res$taxa %>% str_detect(" unclassified") %>% which
-    res <- res[-res_uncl,]
+  df <- summarise(df, sum(N), .by = c("taxa", "sample"))
+  
+  res <- df %>%
+    pivot_wider(values_from = `sum(N)`, names_from = sample, id_cols = taxa)
+  
+  rn_res <- res$taxa
+  res <- res[,-1] %>%
+    sapply(as.numeric) %>%
+    as.matrix
+  res[is.na(res)] <- 0
+  rownames(res) <- rn_res
+  
+  if(top != F) {
+    df_sum <- apply(res, 1, sum)
+    res <- res[order(df_sum, decreasing = T),]
+    res <- res[1:top,]
   }
   
-  row.names(res) <- res$taxa
-  res <- res[,-1]
+  if (scale != F) {
+    row.names(res) -> rdf
+    if (scale == "log2") res <- log2(res + 1)
+    if (scale == "scale") res <- res %>% apply(2, scale)
+    row.names(res) <- rdf
+  }
   
-  
-  print("wider table done)")
   return(res)
 }

@@ -25,6 +25,8 @@ pkgs <- c(
   ## core libraries declared in source_functions.R
   "tidyverse", "ggrepel", "corrplot", "viridis", "Rtsne",
   "circlize", "factoextra", "ggraph", "igraph",
+  ## tidygraph -> ggraph engine (df2graph / df2ggraph)
+  "tidygraph",
   ## additional packages used by the plot/diversity functions
   "abdiv",      # alpha/beta diversity metrics + bray_curtis
   "usedist",    # dist_make() used by df2beta
@@ -67,4 +69,77 @@ if (!requireNamespace("ggviolinbox", quietly = TRUE)) {
   cat("Installed ggviolinbox from GitHub.\n")
 } else {
   cat("ggviolinbox already installed.\n")
+}
+
+## NetCoMi: optional (Suggests) microbial-network support for df2netcomi() /
+## df2netcomi_graph(). Installed from GitHub (github.com/stefpeschel/NetCoMi).
+## Wrapped in tryCatch so a NetCoMi failure NEVER breaks the bootstrap: the
+## package's NetCoMi code is guarded by requireNamespace() and simply errors
+## with an install hint when NetCoMi is absent.
+##
+## This environment runs R 4.3.3 / Bioconductor 3.18, but NetCoMi HEAD and its
+## SPRING/SpiecEasi HEAD dependencies now require R >= 4.5/4.6, so we pin
+## R-4.3-compatible refs: NetCoMi v1.1.0, SpiecEasi v1.1.1, and the SPRING
+## commit (3d641a4) that still targets R >= 2.10. SpiecEasi links against a
+## modern RcppArmadillo that needs C++14, so we force C++14 for C++11 packages.
+if (!requireNamespace("NetCoMi", quietly = TRUE)) {
+  ok <- tryCatch({
+    Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS = "true")
+
+    ## Force C++14 for packages that declare only C++11 (SpiecEasi + modern
+    ## RcppArmadillo). Written to the running user's ~/.R/Makevars.
+    mk_dir <- path.expand("~/.R")
+    if (!dir.exists(mk_dir)) dir.create(mk_dir, recursive = TRUE)
+    mk <- file.path(mk_dir, "Makevars")
+    mk_lines <- if (file.exists(mk)) readLines(mk) else character(0)
+    for (v in c("CXX11STD = -std=gnu++14", "CXX14STD = -std=gnu++14")) {
+      key <- sub(" .*$", "", v)
+      mk_lines <- mk_lines[!grepl(paste0("^", key, "\\b"), mk_lines)]
+      mk_lines <- c(mk_lines, v)
+    }
+    writeLines(mk_lines, mk)
+
+    if (!requireNamespace("remotes", quietly = TRUE))
+      install.packages("remotes")
+
+    ## pulsar was archived on CRAN (2026): install its last source version.
+    if (!requireNamespace("pulsar", quietly = TRUE)) {
+      install.packages(paste0("https://cran.r-project.org/src/contrib/",
+                              "Archive/pulsar/pulsar_0.3.13.tar.gz"),
+                       repos = NULL, type = "source")
+    }
+
+    ## Binary CRAN/Bioc dependencies (incl. limma, used by netConstruct()).
+    nc_deps <- c("mixedCCA", "huge", "rootSolve", "mvtnorm", "VGAM",
+                 "corrplot", "doSNOW", "foreach", "fdrtool", "filematrix",
+                 "gtools", "orca", "qgraph", "RColorBrewer", "Rdpack",
+                 "vegan", "WGCNA", "Biobase", "limma")
+    nc_deps <- setdiff(nc_deps, rownames(installed.packages()))
+    if (length(nc_deps) > 0) install.packages(nc_deps)
+
+    if (!requireNamespace("SpiecEasi", quietly = TRUE))
+      remotes::install_github("zdk123/SpiecEasi@v1.1.1", upgrade = "never",
+                              dependencies = c("Depends", "Imports",
+                                               "LinkingTo"))
+    if (!requireNamespace("SPRING", quietly = TRUE))
+      remotes::install_github("GraceYoon/SPRING@3d641a4", upgrade = "never",
+                              dependencies = c("Depends", "Imports",
+                                               "LinkingTo"))
+    remotes::install_github("stefpeschel/NetCoMi@v1.1.0",
+                            dependencies = c("Depends", "Imports", "LinkingTo"),
+                            upgrade = "never")
+    requireNamespace("NetCoMi", quietly = TRUE)
+  }, error = function(e) {
+    cat("WARNING: NetCoMi install failed (non-fatal):", conditionMessage(e),
+        "\n")
+    FALSE
+  })
+  if (isTRUE(ok)) {
+    cat("Installed NetCoMi from GitHub (v1.1.0).\n")
+  } else {
+    cat("NetCoMi not installed; df2netcomi()/df2netcomi_graph() will error ",
+        "with an install hint until it is available.\n", sep = "")
+  }
+} else {
+  cat("NetCoMi already installed.\n")
 }

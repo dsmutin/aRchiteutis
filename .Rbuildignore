@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^\.cursor$
+^img$
+^pipeline\.R$
+^test$
+^README\.md$
+^\.github$
+^devtools_.*\.txt$

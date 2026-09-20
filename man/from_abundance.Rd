@@ -26,9 +26,18 @@ contain a \code{sample} column (or use the first column as the sample key).}
 A \link[tibble:tibble]{tibble::tibble} in canonical aRchiteutis shape.
 }
 \description{
-Accepts a wide numeric matrix / data frame (taxa in rows, samples in columns),
-a wide data frame whose first column holds taxon names, or a long data frame
-that already has \code{taxa} + \code{sample} (passed through \code{\link{as_archi}}).
+Accepts the usual microbiome layouts:
+}
+\details{
+\itemize{
+\item a \strong{wide} numeric matrix / data frame (taxa in rows, samples in columns);
+\item a wide data frame whose first column holds taxon names;
+\item a \strong{long} data frame that already has \code{taxa} + \code{sample} (passed through
+\code{\link[=as_archi]{as_archi()}}).
+}
+
+The result is a tidy aRchiteutis table that can be handed straight to the
+\verb{df2*} plotting functions.
 }
 \examples{
 mat <- matrix(c(10, 5, 1, 20, 0, 4), nrow = 2,
@@ -36,4 +45,5 @@ mat <- matrix(c(10, 5, 1, 20, 0, 4), nrow = 2,
                               c("s1", "s2", "s3")))
 df <- from_abundance(mat, clade = "G")
 df2composition(df)
+
 }

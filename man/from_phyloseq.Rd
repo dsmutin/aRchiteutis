@@ -10,7 +10,7 @@ from_phyloseq(physeq, taxa_rank = NULL)
 \item{physeq}{A \code{phyloseq} object, or a list with \code{otu_table} / \code{tax_table}
 / \code{sample_data}.}
 
-\item{taxa_rank}{Optional rank name (\code{"Genus"}, \code{"Species"}, \code{"Family"}, \ldots)
+\item{taxa_rank}{Optional rank name (\code{"Genus"}, \code{"Species"}, \code{"Family"}, …)
 or clade letter used to label \code{taxa} and \code{clade}. When \code{NULL}, taxon
 names from the OTU table are kept and the finest available rank is used
 for \code{clade}.}
@@ -21,8 +21,10 @@ A \link[tibble:tibble]{tibble::tibble} in canonical aRchiteutis shape.
 \description{
 Pulls the OTU table, optional taxonomy table and sample data out of a
 phyloseq object and returns a tidy aRchiteutis table. Requires the
-Bioconductor package \pkg{phyloseq} (Suggests, not imported).
-
+Bioconductor phyloseq package at runtime (not imported).
+}
+\details{
 A plain list with elements \code{otu_table} (taxa x samples matrix), optional
-\code{tax_table} and optional \code{sample_data} is also accepted.
+\code{tax_table} and optional \code{sample_data} is also accepted, which is handy in
+tests and when the phyloseq object has already been unpacked in Python.
 }

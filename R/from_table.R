@@ -207,8 +207,8 @@ from_abundance <- function(x, taxa = NULL, samples = NULL, clade = "S",
 #' Import a phyloseq object
 #'
 #' Pulls the OTU table, optional taxonomy table and sample data out of a
-#' [phyloseq::phyloseq] object and returns a tidy aRchiteutis table. Requires
-#' the Bioconductor package \pkg{phyloseq} (Suggests, not imported).
+#' phyloseq object and returns a tidy aRchiteutis table. Requires the
+#' Bioconductor phyloseq package at runtime (not imported).
 #'
 #' A plain list with elements `otu_table` (taxa x samples matrix), optional
 #' `tax_table` and optional `sample_data` is also accepted, which is handy in
@@ -245,7 +245,7 @@ from_phyloseq <- function(physeq, taxa_rank = NULL) {
       labels <- apply(tax, 1, function(row) {
         row <- as.character(row)
         row <- row[!is.na(row) & nzchar(row)]
-        if (!length(row)) NA_character_ else tail(row, 1)
+        if (!length(row)) NA_character_ else utils::tail(row, 1)
       })
       if (is.null(taxa_rank)) {
         taxa <- ifelse(is.na(labels), taxa, labels)
@@ -274,7 +274,7 @@ from_phyloseq <- function(physeq, taxa_rank = NULL) {
     if (!requireNamespace("phyloseq", quietly = TRUE)) {
       stop("Install phyloseq (Bioconductor) to import phyloseq objects.")
     }
-    otu <- as(phyloseq::otu_table(physeq), "matrix")
+    otu <- as.matrix(phyloseq::otu_table(physeq))
     if (!isTRUE(phyloseq::taxa_are_rows(physeq))) {
       otu <- t(otu)
     }

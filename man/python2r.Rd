@@ -10,7 +10,7 @@ python2r(x, ...)
 \item{x}{Path to a CSV/TSV written by the Python helper, an in-memory
 abundance table, or a reticulate Python object.}
 
-\item{...}{Passed to \code{\link{from_abundance}} (\code{clade}, \code{legend}, \code{taxa},
+\item{...}{Passed to \code{\link[=from_abundance]{from_abundance()}} (\code{clade}, \code{legend}, \code{taxa},
 \code{samples}).}
 }
 \value{
@@ -18,11 +18,12 @@ A \link[tibble:tibble]{tibble::tibble} in canonical aRchiteutis shape.
 }
 \description{
 Small bridge for the "load in Python, visualise in R" step:
-
+}
+\details{
 \enumerate{
 \item From Python, dump a pandas DataFrame / numpy array with
-  \code{inst/python/python2r.py} (writes a wide CSV, taxa in the first column).
-\item In R, call \code{python2r("abundance.csv")} and then any \code{df2*} plot.
+\code{inst/python/python2r.py} (writes a wide CSV, taxa in the first column).
+\item In R, call \code{python2r("abundance.csv")} and then any \verb{df2*} plot.
 }
 
 Live \code{reticulate} objects (pandas DataFrame, numpy ndarray) are converted
@@ -32,4 +33,5 @@ in-memory when \pkg{reticulate} is installed.
 csv <- system.file("extdata", "python_abundance.csv", package = "aRchiteutis")
 df <- python2r(csv, clade = "G")
 df2barplot(df)
+
 }

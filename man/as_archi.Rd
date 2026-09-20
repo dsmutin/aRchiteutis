@@ -7,7 +7,7 @@
 as_archi(df, clade = "S")
 }
 \arguments{
-\item{df}{A data frame that already looks like a \code{\link{get_counts}} result, or
+\item{df}{A data frame that already looks like a \code{\link[=get_counts]{get_counts()}} result, or
 that uses common aliases (\code{taxon}/\code{otu}/\code{asv} for \code{taxa}, \code{rank} for
 \code{clade}, \code{count}/\code{reads} for \code{N}, and so on).}
 

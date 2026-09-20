@@ -14,7 +14,10 @@ df2tsne(
 )
 }
 \arguments{
-\item{df}{A numeric taxa-by-sample matrix, e.g. from \code{\link[=df_untidy]{df_untidy()}}.}
+\item{df}{A numeric taxa-by-sample matrix, e.g. from \code{\link[=df_untidy]{df_untidy()}}. A
+\link[phyloseq:phyloseq]{phyloseq::phyloseq} object or a long \code{df} from \code{\link[=get_counts]{get_counts()}} is also
+accepted and reduced to a top genus-level matrix first (a plain matrix is
+used as-is).}
 
 \item{color}{Either \code{"clust"} (default; colour by hierarchical cluster) or a
 vector of length \code{nrow(df)} giving a grouping per taxon.}

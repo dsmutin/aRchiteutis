@@ -15,6 +15,7 @@
 #' @importFrom rlang .data
 df2donut <- function(df, ...) {
 
+  df <- as_samovar_df(df)
   df <- dplyr::summarise(df, m = mean(amount), .by = c("taxa", "clade"))
   df <- df[order(df$m), ]
   df$ymax <- cumsum(df$m)
@@ -46,6 +47,7 @@ df2donut <- function(df, ...) {
 #' @importFrom rlang .data
 df2composition <- function(df) {
 
+  df <- as_samovar_df(df)
   lvir <- length(levels(factor(df$taxa)))
 
   ggplot2::ggplot(df, ggplot2::aes(y = .data$sample, x = .data$amount,
@@ -70,6 +72,7 @@ df2composition <- function(df) {
 #' @export
 #' @importFrom rlang .data
 df2barplot <- function(df, ...) {
+  df <- as_samovar_df(df)
   lvir <- length(levels(droplevels(factor(df$taxa))))
 
   df_sum <- dplyr::summarise(df, m = mean(amount), .by = "taxa")

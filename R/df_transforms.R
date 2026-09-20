@@ -34,6 +34,8 @@ df_untidy <- function(df,
                       drop_unclassified = FALSE,
                       keep_sample_name = TRUE) {
 
+  df <- as_samovar_df(df)
+
   # `trim` is a legacy alias for `top`
   if (isFALSE(top) && !isFALSE(trim)) top <- trim
 
@@ -80,6 +82,7 @@ df_untidy <- function(df,
 #' @return `df` with rows whose `taxa` contains `"unclassified"` removed.
 #' @export
 df_tidy_drop_unclassified <- function(df) {
+  df <- as_samovar_df(df)
   df[!stringr::str_detect(df$taxa, "unclassified"), ]
 }
 
@@ -99,6 +102,7 @@ df_tidy_drop_unclassified <- function(df) {
 #' @export
 df_get_top_taxa <- function(df, drop_unclassified = TRUE, clade = FALSE, top = 50) {
 
+  df <- as_samovar_df(df)
   if (!isFALSE(clade)) df <- df[df$clade == clade, ]
   if (drop_unclassified) df <- df_tidy_drop_unclassified(df)
 
@@ -120,6 +124,7 @@ df_get_top_taxa <- function(df, drop_unclassified = TRUE, clade = FALSE, top = 5
 #' @return `df` with a rescaled `amount` column.
 #' @export
 df_rescale <- function(df) {
+  df <- as_samovar_df(df)
   df_sum <- dplyr::summarise(df, s = sum(N), .by = "sample")
 
   for (i in levels(df$sample)) {
@@ -140,6 +145,7 @@ df_rescale <- function(df) {
 #' @return A filtered `df` with cleaned `clade` values.
 #' @export
 df_drop_clade <- function(df) {
+  df <- as_samovar_df(df)
   clade_chr <- c("U", "R", "D", "P", "C", "O", "F", "G", "S")
 
   df <- df[df$clade %in% clade_chr, ]
@@ -169,6 +175,7 @@ df_drop_clade <- function(df) {
 #' @export
 df_get_parents <- function(df) {
 
+  df <- as_samovar_df(df)
   df <- df_drop_clade(df)
   res <- df
   df <- dplyr::summarise(df, .by = c("taxa", "clade"))
@@ -225,6 +232,7 @@ df_get_parents <- function(df) {
 #' @return A filtered `df` with `"other"` rows added.
 #' @export
 df_taxa_trim <- function(df, top_taxa = 10) {
+  df <- as_samovar_df(df)
   clade_chr <- c("U", "R", "D", "P", "C", "O", "F", "G", "S")
 
   df2 <- df_get_parents(df)
@@ -281,6 +289,7 @@ df_taxa_trim <- function(df, top_taxa = 10) {
 #' @return `df` with the requested taxa removed.
 #' @export
 df_remove_taxa <- function(df, taxa, clade = FALSE) {
+  df <- as_samovar_df(df)
   drop <- df$taxa %in% taxa
   if (!isFALSE(clade)) drop <- drop & (df$clade %in% clade)
   df[!drop, ]

@@ -4,7 +4,14 @@
 ## 24.04 (noble) so packages install as precompiled binaries (no compilation).
 
 options(
-  repos = c(P3M = "https://packagemanager.posit.co/cran/__linux__/noble/latest"),
+  repos = c(
+    P3M = "https://packagemanager.posit.co/cran/__linux__/noble/latest",
+    ## Bioconductor 3.18 (matches R 4.3) via the Posit Public Package Manager so
+    ## Bioconductor deps such as phyloseq resolve from the same mirror.
+    BioCsoft = "https://packagemanager.posit.co/bioconductor/packages/3.18/bioc",
+    BioCann = "https://packagemanager.posit.co/bioconductor/packages/3.18/data/annotation",
+    BioCexp = "https://packagemanager.posit.co/bioconductor/packages/3.18/data/experiment"
+  ),
   ## The User-Agent lets P3M serve Linux binaries for this R version/platform.
   HTTPUserAgent = sprintf(
     "R/%s R (%s)",
@@ -25,7 +32,9 @@ pkgs <- c(
   "ape",        # pcoa() used by df2beta_pcoa
   "ggnewscale", # new_scale_colour() used by df2beta_pcoa
   "ggforce",    # geom_mark_ellipse() used by df2beta_pcoa
-  "tsne"        # df2tsne
+  "tsne",       # df2tsne
+  ## Bioconductor: phyloseq interoperability (ps2df / df2ps)
+  "phyloseq"
 )
 
 installed <- rownames(installed.packages())

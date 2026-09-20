@@ -7,7 +7,10 @@
 df2pca_sp(df, scale = TRUE, ...)
 }
 \arguments{
-\item{df}{A numeric taxa-by-sample matrix, e.g. from \code{\link[=df_untidy]{df_untidy()}}.}
+\item{df}{A numeric taxa-by-sample matrix, e.g. from \code{\link[=df_untidy]{df_untidy()}}. A
+\link[phyloseq:phyloseq]{phyloseq::phyloseq} object or a long \code{df} from \code{\link[=get_counts]{get_counts()}} is also
+accepted and is reduced to a genus-level matrix with a default
+\code{\link[=df_untidy]{df_untidy()}} call first (a plain matrix is used as-is).}
 
 \item{scale}{Logical. Scale variables to unit variance before PCA.}
 

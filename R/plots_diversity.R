@@ -26,6 +26,7 @@
 #'   heip_e pielou_e strong mcintosh_d berger_parker_d richness mcintosh_e
 #'   menhinick margalef kempton_taylor_q bray_curtis
 df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
+  df <- as_samovar_df(df)
   gg <- df %>%
     dplyr::group_by(sample) %>%
     dplyr::summarise(dplyr::across(N, list(
@@ -78,6 +79,7 @@ df2alpha <- function(df, split_by = FALSE, add_legend = FALSE,
                      alpha_function_list = list(Shannon = abdiv::shannon,
                                                 Simpson = abdiv::simpson),
                      ...) {
+  df <- as_samovar_df(df)
   gg <- df %>%
     dplyr::group_by(sample) %>%
     dplyr::summarise(dplyr::across(N, alpha_function_list))
@@ -191,6 +193,8 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
                     add_legend = FALSE, add_labels = FALSE,
                     print_df = FALSE, ...) {
 
+  df <- as_samovar_df(df)
+
   name2viridis <- function(name) {
     name <- as.character(unlist(name))
     n_un <- data.frame(name = unique(name),
@@ -293,6 +297,7 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
                          treshhold_up = 1, treshhold_down = 0,
                          add_legend = FALSE, add_ellipse = FALSE, ...) {
 
+  df <- as_samovar_df(df)
   df_legend <- unique(df[, -c(1:2, 4:6)])
 
   if (!isFALSE(add_legend)) {

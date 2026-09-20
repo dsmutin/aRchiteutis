@@ -16,6 +16,7 @@ export(df2donut)
 export(df2heatmap)
 export(df2pca_sample)
 export(df2pca_sp)
+export(df2ps)
 export(df2tsne)
 export(df2volcano)
 export(df_drop_clade)
@@ -29,6 +30,7 @@ export(df_tidy_drop_unclassified)
 export(df_untidy)
 export(get_counts)
 export(get_kraken_taxonomy)
+export(ps2df)
 importFrom(abdiv,
   berger_parker_d,
   bray_curtis,

@@ -3,7 +3,10 @@
 #' Runs a principal component analysis treating samples as observations and taxa
 #' as variables, and draws the individuals plot with \pkg{factoextra}.
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and is reduced to a genus-level matrix with a default
+#'   [df_untidy()] call first (a plain matrix is used as-is).
 #' @param scale Logical. Scale variables to unit variance before PCA.
 #' @param detect Character or `FALSE`. If set, samples whose column name matches
 #'   this pattern are coloured with `detect`, the rest with `detect2`.
@@ -21,6 +24,7 @@
 #' @export
 df2pca_sample <- function(df, scale = TRUE, detect = FALSE,
                           detect2 = "other", ...) {
+  df <- as_samovar_matrix(df, scale = "scale")
   mat <- df
   if (isTRUE(scale)) mat <- mat[apply(mat, 1, stats::var) > 0, , drop = FALSE]
 
@@ -54,6 +58,7 @@ df2pca_sample <- function(df, scale = TRUE, detect = FALSE,
 #'
 #' @export
 df2pca_sp <- function(df, scale = TRUE, ...) {
+  df <- as_samovar_matrix(df, scale = FALSE, top = 15)
   mat <- df
   if (isTRUE(scale)) mat <- mat[apply(mat, 1, stats::var) > 0, , drop = FALSE]
 
@@ -66,7 +71,10 @@ df2pca_sp <- function(df, scale = TRUE, ...) {
 
 #' Base-R heatmap of a taxa-by-sample matrix
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and reduced to a genus-level matrix first (a plain matrix is used
+#'   as-is).
 #' @param clade Ignored; kept for backward compatibility (do the clade / trim
 #'   selection in [df_untidy()] instead).
 #' @param trim Ignored; kept for backward compatibility.
@@ -83,6 +91,7 @@ df2pca_sp <- function(df, scale = TRUE, ...) {
 #'
 #' @export
 df2heatmap <- function(df, clade = FALSE, trim = FALSE, ...) {
+  df <- as_samovar_matrix(df, scale = FALSE, top = 30)
   invisible(stats::heatmap(t(df), col = rev(viridis::viridis(256)), ...))
 }
 
@@ -91,7 +100,10 @@ df2heatmap <- function(df, clade = FALSE, trim = FALSE, ...) {
 #' Scales the matrix and draws a Ward.D2 dendrogram of either the taxa
 #' (`use = "sp"`) or the samples (`use = "sample"`).
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and reduced to a genus-level matrix first (a plain matrix is used
+#'   as-is).
 #' @param k_means Integer. Number of clusters to outline with rectangles
 #'   (`< 2` draws no rectangles).
 #' @param use `"sp"` to cluster taxa (rows) or `"sample"` to cluster columns.
@@ -107,6 +119,7 @@ df2heatmap <- function(df, clade = FALSE, trim = FALSE, ...) {
 #'
 #' @export
 df2cluster <- function(df, k_means = 2, use = "sp") {
+  df <- as_samovar_matrix(df, scale = FALSE, top = 30)
   rdf <- rownames(df)
   df <- apply(df, 2, scale)
   rownames(df) <- rdf
@@ -153,6 +166,7 @@ df2cluster <- function(df, k_means = 2, use = "sp") {
 df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
                        counts = FALSE, top = FALSE, log2_scale = FALSE, ...) {
 
+  df <- as_samovar_df(df)
   amount_from <- if (counts) "N" else "amount"
   mat <- df_untidy(df, clade = clade, amount_from = amount_from,
                    top = top, keep_sample_name = FALSE)
@@ -192,7 +206,10 @@ df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
 
 #' Correlation plot between taxa
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and reduced to a genus-level matrix first (a plain matrix is used
+#'   as-is).
 #' @param k_means Integer or `FALSE`. Number of clusters to outline with
 #'   rectangles.
 #' @param ... Passed to [corrplot::corrplot].
@@ -208,6 +225,7 @@ df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
 #'
 #' @export
 df2corrplot <- function(df, k_means = FALSE, ...) {
+  df <- as_samovar_matrix(df, scale = FALSE, top = 15)
   cmat <- stats::cor(t(df))
   cmat[is.na(cmat)] <- 0
 
@@ -223,7 +241,10 @@ df2corrplot <- function(df, k_means = FALSE, ...) {
 #' Builds a taxa-by-taxa correlation graph and draws it as a circular
 #' \pkg{ggraph} layout, colouring edges either by correlation or by cluster.
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and reduced to a genus-level matrix first (a plain matrix is used
+#'   as-is).
 #' @param clade Ignored; kept for backward compatibility.
 #' @param k_means Integer. Number of clusters.
 #' @param amount_from Ignored; kept for backward compatibility.
@@ -249,6 +270,7 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
                      coenf_level = FALSE, coenf = "both",
                      line_as_clusters = FALSE, ...) {
 
+  df <- as_samovar_matrix(df, scale = FALSE, top = 15)
   df <- stats::cor(t(df))
   df[is.na(df)] <- 0
 
@@ -350,7 +372,10 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
 #' Runs t-SNE (via \pkg{tsne}) on a taxa-by-sample matrix and plots the taxa in
 #' two dimensions, coloured by hierarchical cluster.
 #'
-#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()].
+#' @param df A numeric taxa-by-sample matrix, e.g. from [df_untidy()]. A
+#'   [phyloseq::phyloseq] object or a long `df` from [get_counts()] is also
+#'   accepted and reduced to a top genus-level matrix first (a plain matrix is
+#'   used as-is).
 #' @param color Either `"clust"` (default; colour by hierarchical cluster) or a
 #'   vector of length `nrow(df)` giving a grouping per taxon.
 #' @param k_means Integer. Number of clusters when `color = "clust"`.
@@ -372,6 +397,8 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
 #' @importFrom rlang .data
 df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
                     perplexity = 30, max_iter = 1000) {
+
+  df <- as_samovar_matrix(df, scale = "scale", top = 40)
 
   if (length(color) == nrow(df)) {
     groups <- data.frame(taxa = rownames(df), clust = color)
@@ -436,6 +463,7 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
 df2volcano <- function(df, legend_detect, treshhold_logAC = 0.5,
                        treshhold_p = 0.05) {
 
+  df <- as_samovar_df(df)
   df_un <- df %>% df_untidy(keep_sample_name = FALSE)
   df1 <- df_un[, stringr::str_detect(colnames(df_un), legend_detect[1]),
                drop = FALSE]

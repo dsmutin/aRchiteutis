@@ -8,5 +8,5 @@
 ^README\.md$
 ^\.github$
 ^vignettes\.md$
-^\.cursor$
+^skills$
 ^devtools_.*\.txt$

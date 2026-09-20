@@ -30,5 +30,7 @@ utils::globalVariables(c(
   "value", "name", "x", "y", "ymax", "ymin", "split", "sample2",
   "logAC", "p", "sd", "Axis.1", "Axis.2", "group", "cluster",
   # ggraph node/edge computed aesthetics
-  "vals"
+  "vals",
+  # tidygraph / ggraph engine (graph.R, netcomi.R) node & edge columns
+  "weight", "abs_weight", "community", "degree", "betweenness", "closeness"
 ))

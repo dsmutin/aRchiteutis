@@ -50,4 +50,3 @@ importFrom(abdiv,
 )
 importFrom(magrittr,"%>%")
 importFrom(rlang,.data)
-importFrom(stats,na.omit)

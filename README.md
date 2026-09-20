@@ -3,21 +3,38 @@
 
 ## Installation
 
-To get the tool clone the git repository:
-```bash
-git clone https://github.com/dsmutin/samovar.git
+`aRchiteutis` (formerly *samovar*) is now a regular, installable R package.
+
+```r
+# install.packages("remotes")
+remotes::install_github("dsmutin/aRchiteutis")
 ```
 
-In your R session, source all functions:
-```R
-source(PATH/TO/SAMOVAR/scripts/source.R)
+Then attach it like any other package:
+
+```r
+library(aRchiteutis)
+```
+
+A small set of example Kraken2 reports ships with the package under
+`inst/extdata/` so the examples and tests run out of the box:
+
+```r
+path   <- system.file("extdata", package = "aRchiteutis")
+legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+df <- get_counts(path = path, pattern = "decont_b", legend = legend,
+                 trim_char = "_")
 ```
 
 ## Structure
 
-Functions for data preparation and their descriptions are avialable in /functions
-Manipulations to visualize data is avialable in /plots
-Test pipeline via /test repositorium
+- `R/` — package source. Data-preparation helpers live in
+  `R/get_counts.R` and `R/df_transforms.R`; the plotting functions are grouped
+  into `R/plots_composition.R`, `R/plots_diversity.R` and
+  `R/plots_ordination.R`.
+- `tests/testthat/` — a `testthat` (3rd edition) suite with at least one test
+  for every visualisation function.
+- `pipeline.R` / `test/pipeline.R` — end-to-end usage walkthroughs.
 
 Enjoy beauty of R plots!
 

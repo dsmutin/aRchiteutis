@@ -29,7 +29,6 @@
 #' head(df)
 #'
 #' @export
-#' @importFrom stats na.omit
 get_counts <- function(path,
                        keep_unclassified = TRUE,
                        pattern = "",
@@ -73,7 +72,7 @@ get_counts <- function(path,
 
       # add sample and trim file name
       if (!isFALSE(trim_char)) {
-        file <- unlist(purrr::map(stringr::str_split(file, trim_char), 1))
+        file <- stringr::str_split(file, trim_char)[[1]][1]
       }
       df$sample <- file
       df <- df[, c(4, 3, 6, 2, 1, 5)]
@@ -110,8 +109,7 @@ get_counts <- function(path,
               (stringr::str_detect(df_names[i, ], "species")) |
               (stringr::str_detect(df_names[i, ], "cellular"))))
 
-        df_genus <- unlist(purrr::map(
-          stringr::str_split(df_names[i, max(df_genus)], " "), 1))
+        df_genus <- stringr::str_split(df_names[i, max(df_genus)], " ")[[1]][1]
         if (is.null(df_genus)) df_genus <- paste0("unclassified ", df_names[i, 6])
 
         df_genus_vector <- c(df_genus_vector, df_genus)
@@ -134,8 +132,8 @@ get_counts <- function(path,
     }
 
     if (!isFALSE(trim_char)) {
-      res$sample <- unlist(purrr::map(
-        stringr::str_split(res$sample, trim_char), 1))
+      res$sample <- vapply(stringr::str_split(res$sample, trim_char),
+                           function(z) z[1], character(1))
     }
   }
 
@@ -145,7 +143,7 @@ get_counts <- function(path,
       df <- utils::read.table(paste0(path, "/", fname), sep = "\t", header = TRUE)
 
       if (!isFALSE(trim_char)) {
-        fname <- unlist(purrr::map(stringr::str_split(fname, trim_char), 1))
+        fname <- stringr::str_split(fname, trim_char)[[1]][1]
       }
 
       df <- data.frame(taxa = df$name,
@@ -166,8 +164,8 @@ get_counts <- function(path,
                               stringsAsFactors = TRUE)
 
     if (!isFALSE(trim_char)) {
-      legend$sample <- unlist(purrr::map(
-        stringr::str_split(row.names(legend), trim_char), 1))
+      legend$sample <- vapply(stringr::str_split(row.names(legend), trim_char),
+                              function(z) z[1], character(1))
     } else {
       legend$sample <- row.names(legend)
     }

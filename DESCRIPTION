@@ -46,10 +46,13 @@ Imports:
     utils,
     viridis
 Suggests:
+    ggviolinbox,
     phyloseq,
     testthat (>= 3.0.0),
     vdiffr,
     withr
+Remotes:
+    dsmutin/ggviolinbox
 biocViews:
 Config/testthat/edition: 3
 URL: https://github.com/dsmutin/aRchiteutis

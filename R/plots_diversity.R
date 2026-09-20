@@ -9,6 +9,14 @@
 #'   into groups on the x-axis.
 #' @param add_legend Integer column index/indices (or `FALSE`) whose values are
 #'   combined into the colour legend.
+#' @param violinbox Controls the distribution geom. `FALSE` (default) keeps the
+#'   classic \pkg{ggplot2} `geom_violin` panel. `TRUE` or `"combined"` draws a
+#'   combined half-violin + half-boxplot via
+#'   [ggviolinbox::geom_violinboxplot()]; `"halves"` uses a
+#'   [ggviolinbox::geom_halfviolin()] + [ggviolinbox::geom_halfboxplot()] pair.
+#'   Any non-`FALSE` value requires the \pkg{ggviolinbox} package.
+#' @param box_side,violin_side Side (`"left"` / `"right"`) each geom is drawn on
+#'   when `violinbox` is enabled. Ignored when `violinbox = FALSE`.
 #' @param ... Passed to the geoms.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -19,13 +27,18 @@
 #' df <- get_counts(path = path, pattern = "m1[124]_", legend = legend,
 #'                  trim_char = "_")
 #' df2alpha_summary(df[df$clade == "S", ])
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2alpha_summary(df[df$clade == "S", ], violinbox = TRUE)
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
 #' @importFrom abdiv dominance simpson simpson_e invsimpson shannon brillouin_d
 #'   heip_e pielou_e strong mcintosh_d berger_parker_d richness mcintosh_e
 #'   menhinick margalef kempton_taylor_q bray_curtis
-df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
+df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE,
+                             violinbox = FALSE, box_side = "left",
+                             violin_side = "right", ...) {
   df <- as_samovar_df(df)
   gg <- df %>%
     dplyr::group_by(sample) %>%
@@ -54,7 +67,9 @@ df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
   gg <- tidyr::pivot_longer(gg, cols = -1)
   gg$name <- forcats::fct_inorder(factor(stringr::str_remove_all(gg$name, "N_")))
 
-  df2diversity_plot(df, gg, split_by, add_legend, violin = TRUE, ...)
+  df2diversity_plot(df, gg, split_by, add_legend, violin = TRUE,
+                    violinbox = violinbox, box_side = box_side,
+                    violin_side = violin_side, ...)
 }
 
 #' Alpha diversity for a chosen set of metrics
@@ -72,13 +87,17 @@ df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 #' df2alpha(df[df$clade == "S", ])
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2alpha(df[df$clade == "S", ], violinbox = TRUE)
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
 df2alpha <- function(df, split_by = FALSE, add_legend = FALSE,
                      alpha_function_list = list(Shannon = abdiv::shannon,
                                                 Simpson = abdiv::simpson),
-                     ...) {
+                     violinbox = FALSE, box_side = "left",
+                     violin_side = "right", ...) {
   df <- as_samovar_df(df)
   gg <- df %>%
     dplyr::group_by(sample) %>%
@@ -87,11 +106,15 @@ df2alpha <- function(df, split_by = FALSE, add_legend = FALSE,
   gg <- tidyr::pivot_longer(gg, cols = -1)
   gg$name <- forcats::fct_inorder(factor(stringr::str_remove_all(gg$name, "N_")))
 
-  df2diversity_plot(df, gg, split_by, add_legend, violin = FALSE, ...)
+  df2diversity_plot(df, gg, split_by, add_legend, violin = FALSE,
+                    violinbox = violinbox, box_side = box_side,
+                    violin_side = violin_side, ...)
 }
 
 # Shared plotting backend for df2alpha() / df2alpha_summary().
-df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
+df2diversity_plot <- function(df, gg, split_by, add_legend, violin,
+                              violinbox = FALSE, box_side = "left",
+                              violin_side = "right", ...) {
   if (!isFALSE(add_legend)) {
     leg <- unique(df[, c(3, add_legend)])
     leg[, 2] <- apply(leg[, -1, drop = FALSE], 1,
@@ -109,7 +132,10 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
     gg <- dplyr::left_join(leg2[, 1:2], gg, by = "sample")
 
     p <- ggplot2::ggplot(gg, ggplot2::aes(y = .data$value, x = .data$split))
-    p <- p + if (violin) {
+    p <- p + if (!isFALSE(violinbox)) {
+      violinbox_geom(violinbox, box_side, violin_side,
+                     mapping = ggplot2::aes(fill = .data$split), alpha = 0.3)
+    } else if (violin) {
       ggplot2::geom_violin(trim = FALSE,
                            ggplot2::aes(fill = .data$split), alpha = 0.3)
     } else {
@@ -127,6 +153,22 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
       ggplot2::theme_minimal() +
       ggplot2::theme(legend.position = "right",
                      axis.text.x = ggplot2::element_blank())
+  } else if (!isFALSE(violinbox)) {
+    # ggviolinbox needs the categorical variable on x; coord_flip() restores
+    # the horizontal (metric-on-x) layout of the classic panel.
+    ggplot2::ggplot(gg, ggplot2::aes(x = .data$name, y = .data$value)) +
+      violinbox_geom(violinbox, box_side, violin_side) +
+      ggplot2::geom_jitter(ggplot2::aes(color = .data$sample2), width = 0.1) +
+      ggplot2::coord_flip() +
+      ggplot2::facet_wrap(~name, drop = TRUE, ncol = 4, scales = "free",
+                          strip.position = "top") +
+      ggplot2::scale_color_discrete(
+        "", type = viridis::viridis(length(unique(gg$sample))),
+        labels = as.character(unlist(leg[, ncol(as.data.frame(leg))]))) +
+      ggplot2::ylab("") + ggplot2::xlab("") +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(legend.position = "right",
+                     axis.text.y = ggplot2::element_blank())
   } else {
     p <- ggplot2::ggplot(gg, ggplot2::aes(x = .data$value, y = .data$name))
     p <- p + if (violin) {

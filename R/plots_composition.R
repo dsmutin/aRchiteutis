@@ -60,6 +60,17 @@ df2composition <- function(df) {
 #' Box plot of per-sample composition across taxa
 #'
 #' @param df A tidy `tibble` from [get_counts()].
+#' @param violinbox Controls the per-taxon distribution geom. `FALSE` (default)
+#'   keeps the classic horizontal \pkg{ggplot2} `geom_boxplot`. `TRUE` or
+#'   `"combined"` draws a combined half-violin + half-boxplot via
+#'   [ggviolinbox::geom_violinboxplot()]; `"halves"` uses a
+#'   [ggviolinbox::geom_halfviolin()] + [ggviolinbox::geom_halfboxplot()] pair.
+#'   Because ggviolinbox needs the categorical variable on the x axis, the
+#'   violinbox layout maps taxa to x and applies [ggplot2::coord_flip()] to keep
+#'   the familiar horizontal orientation. Any non-`FALSE` value requires the
+#'   \pkg{ggviolinbox} package.
+#' @param box_side,violin_side Side (`"left"` / `"right"`) each geom is drawn on
+#'   when `violinbox` is enabled. Ignored when `violinbox = FALSE`.
 #' @param ... Reserved for future use.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -68,10 +79,15 @@ df2composition <- function(df) {
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 #' df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6))
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6),
+#'              violinbox = TRUE)
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
-df2barplot <- function(df, ...) {
+df2barplot <- function(df, violinbox = FALSE, box_side = "left",
+                       violin_side = "right", ...) {
   df <- as_samovar_df(df)
   lvir <- length(levels(droplevels(factor(df$taxa))))
 
@@ -84,9 +100,18 @@ df2barplot <- function(df, ...) {
   df <- rbind(df[taxa, ], df[!taxa, ])
   df$taxa <- forcats::fct_inorder(df$taxa)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount, y = .data$taxa,
-                                   fill = .data$taxa)) +
-    ggplot2::geom_boxplot(show.legend = FALSE) +
+  if (!isFALSE(violinbox)) {
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$taxa, y = .data$amount,
+                                          fill = .data$taxa)) +
+      violinbox_geom(violinbox, box_side, violin_side, show.legend = FALSE) +
+      ggplot2::coord_flip()
+  } else {
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$amount, y = .data$taxa,
+                                          fill = .data$taxa)) +
+      ggplot2::geom_boxplot(show.legend = FALSE)
+  }
+
+  p +
     ggplot2::theme_minimal() +
     ggplot2::xlab("") + ggplot2::ylab("") +
     ggplot2::scale_fill_discrete("", type = viridis::viridis(lvir)) +

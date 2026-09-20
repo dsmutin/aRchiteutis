@@ -9,6 +9,9 @@ df2alpha(
   split_by = FALSE,
   add_legend = FALSE,
   alpha_function_list = list(Shannon = abdiv::shannon, Simpson = abdiv::simpson),
+  violinbox = FALSE,
+  box_side = "left",
+  violin_side = "right",
   ...
 )
 }
@@ -25,6 +28,16 @@ combined into the colour legend.}
 \item{alpha_function_list}{Named list of diversity functions (defaults to
 Shannon and Simpson from \pkg{abdiv}).}
 
+\item{violinbox}{Controls the distribution geom. \code{FALSE} (default) keeps the
+classic \pkg{ggplot2} \code{geom_violin} panel. \code{TRUE} or \code{"combined"} draws a
+combined half-violin + half-boxplot via
+\code{\link[ggviolinbox:geom_violinboxplot]{ggviolinbox::geom_violinboxplot()}}; \code{"halves"} uses a
+\code{\link[ggviolinbox:geom_halfviolin]{ggviolinbox::geom_halfviolin()}} + \code{\link[ggviolinbox:geom_halfboxplot]{ggviolinbox::geom_halfboxplot()}} pair.
+Any non-\code{FALSE} value requires the \pkg{ggviolinbox} package.}
+
+\item{box_side, violin_side}{Side (\code{"left"} / \code{"right"}) each geom is drawn on
+when \code{violinbox} is enabled. Ignored when \code{violinbox = FALSE}.}
+
 \item{...}{Passed to the geoms.}
 }
 \value{
@@ -38,5 +51,8 @@ diversity functions.
 path <- system.file("extdata", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 df2alpha(df[df$clade == "S", ])
+if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+  df2alpha(df[df$clade == "S", ], violinbox = TRUE)
+}
 
 }

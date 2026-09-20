@@ -4,7 +4,15 @@
 \alias{df2alpha_summary}
 \title{Summary of many alpha-diversity metrics per sample}
 \usage{
-df2alpha_summary(df, split_by = FALSE, add_legend = FALSE, ...)
+df2alpha_summary(
+  df,
+  split_by = FALSE,
+  add_legend = FALSE,
+  violinbox = FALSE,
+  box_side = "left",
+  violin_side = "right",
+  ...
+)
 }
 \arguments{
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}. Retain species-level rows for
@@ -15,6 +23,16 @@ into groups on the x-axis.}
 
 \item{add_legend}{Integer column index/indices (or \code{FALSE}) whose values are
 combined into the colour legend.}
+
+\item{violinbox}{Controls the distribution geom. \code{FALSE} (default) keeps the
+classic \pkg{ggplot2} \code{geom_violin} panel. \code{TRUE} or \code{"combined"} draws a
+combined half-violin + half-boxplot via
+\code{\link[ggviolinbox:geom_violinboxplot]{ggviolinbox::geom_violinboxplot()}}; \code{"halves"} uses a
+\code{\link[ggviolinbox:geom_halfviolin]{ggviolinbox::geom_halfviolin()}} + \code{\link[ggviolinbox:geom_halfboxplot]{ggviolinbox::geom_halfboxplot()}} pair.
+Any non-\code{FALSE} value requires the \pkg{ggviolinbox} package.}
+
+\item{box_side, violin_side}{Side (\code{"left"} / \code{"right"}) each geom is drawn on
+when \code{violinbox} is enabled. Ignored when \code{violinbox = FALSE}.}
 
 \item{...}{Passed to the geoms.}
 }
@@ -31,5 +49,8 @@ legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m1[124]_", legend = legend,
                  trim_char = "_")
 df2alpha_summary(df[df$clade == "S", ])
+if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+  df2alpha_summary(df[df$clade == "S", ], violinbox = TRUE)
+}
 
 }

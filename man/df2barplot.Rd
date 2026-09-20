@@ -4,10 +4,29 @@
 \alias{df2barplot}
 \title{Box plot of per-sample composition across taxa}
 \usage{
-df2barplot(df, ...)
+df2barplot(
+  df,
+  violinbox = FALSE,
+  box_side = "left",
+  violin_side = "right",
+  ...
+)
 }
 \arguments{
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}.}
+
+\item{violinbox}{Controls the per-taxon distribution geom. \code{FALSE} (default)
+keeps the classic horizontal \pkg{ggplot2} \code{geom_boxplot}. \code{TRUE} or
+\code{"combined"} draws a combined half-violin + half-boxplot via
+\code{\link[ggviolinbox:geom_violinboxplot]{ggviolinbox::geom_violinboxplot()}}; \code{"halves"} uses a
+\code{\link[ggviolinbox:geom_halfviolin]{ggviolinbox::geom_halfviolin()}} + \code{\link[ggviolinbox:geom_halfboxplot]{ggviolinbox::geom_halfboxplot()}} pair.
+Because ggviolinbox needs the categorical variable on the x axis, the
+violinbox layout maps taxa to x and applies \code{\link[ggplot2:coord_flip]{ggplot2::coord_flip()}} to keep
+the familiar horizontal orientation. Any non-\code{FALSE} value requires the
+\pkg{ggviolinbox} package.}
+
+\item{box_side, violin_side}{Side (\code{"left"} / \code{"right"}) each geom is drawn on
+when \code{violinbox} is enabled. Ignored when \code{violinbox = FALSE}.}
 
 \item{...}{Reserved for future use.}
 }
@@ -21,5 +40,9 @@ Box plot of per-sample composition across taxa
 path <- system.file("extdata", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6))
+if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+  df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6),
+             violinbox = TRUE)
+}
 
 }

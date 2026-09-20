@@ -52,3 +52,19 @@ if (length(missing) > 0) {
   stop("Failed to install R packages: ", paste(missing, collapse = ", "))
 }
 cat("R package check complete: all", length(pkgs), "packages present.\n")
+
+## ggviolinbox: soft (Suggests) dependency for the optional violinbox rendering
+## in df2alpha() / df2alpha_summary() / df2barplot(). Installed from GitHub
+## (MIT, github.com/dsmutin/ggviolinbox), idempotently. Its DESCRIPTION declares
+## R (>= 4.4); we relax the remotes warning-to-error so it installs on R 4.3.
+if (!requireNamespace("ggviolinbox", quietly = TRUE)) {
+  Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS = "true")
+  if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+  remotes::install_github("dsmutin/ggviolinbox", upgrade = "never")
+  if (!requireNamespace("ggviolinbox", quietly = TRUE)) {
+    stop("Failed to install ggviolinbox from GitHub (dsmutin/ggviolinbox).")
+  }
+  cat("Installed ggviolinbox from GitHub.\n")
+} else {
+  cat("ggviolinbox already installed.\n")
+}

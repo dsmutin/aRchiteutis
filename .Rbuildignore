@@ -7,4 +7,6 @@
 ^test$
 ^README\.md$
 ^\.github$
+^vignettes\.md$
+^\.cursor$
 ^devtools_.*\.txt$

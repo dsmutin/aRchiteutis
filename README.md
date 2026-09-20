@@ -1,9 +1,18 @@
-# aRchiteutis <a href=""><img src="img/logo.png" align="right" width="300"></a> 
-### tool for visualize &amp; work with Kraken2 reports
+# aRchiteutis <a href="https://github.com/dsmutin/aRchiteutis"><img src="img/logo.png" align="right" width="300"></a>
+
+### Visualise and work with Kraken2 metagenomics reports
+
+[![R-CMD-check](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml)
+[![R-package](https://img.shields.io/badge/R-package-276DC3?logo=r&logoColor=white)](https://github.com/dsmutin/aRchiteutis)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+`aRchiteutis` (formerly *samovar*) is an installable R package for parsing,
+transforming and plotting taxonomic composition tables from Kraken2, Kaiju
+and Bracken. Gallery of every plot: [vignettes.md](vignettes.md).
 
 ## Installation
 
-`aRchiteutis` (formerly *samovar*) is now a regular, installable R package.
+Install the development version from GitHub:
 
 ```r
 # install.packages("remotes")
@@ -15,6 +24,10 @@ Then attach it like any other package:
 ```r
 library(aRchiteutis)
 ```
+
+CI runs `R CMD check` on every push and pull request via the
+[R-CMD-check](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml)
+GitHub Action (`r-lib/actions`).
 
 A small set of example Kraken2 reports ships with the package under
 `inst/extdata/` so the examples and tests run out of the box:
@@ -34,6 +47,7 @@ df <- get_counts(path = path, pattern = "decont_b", legend = legend,
   `R/plots_ordination.R`.
 - `tests/testthat/` — a `testthat` (3rd edition) suite with at least one test
   for every visualisation function.
+- `.github/workflows/R-CMD-check.yaml` — package check on GitHub Actions.
 - `pipeline.R` / `test/pipeline.R` — end-to-end usage walkthroughs.
 
 Enjoy beauty of R plots!
@@ -43,7 +57,7 @@ Enjoy beauty of R plots!
 
 ## Data manipulation
 #### get_counts
-get conut and amount table from kraken2 report
+get count and amount table from kraken2 report
 
 ```
       path, #path to k2 reports
@@ -151,7 +165,7 @@ bar plot of the composition
 
 #### df2barplot
 box plot of the composition
-<img src = "img/barpot.png">
+<img src = "img/barplot.png">
 
 #### df2cluster
 cluster plot. untidy table input

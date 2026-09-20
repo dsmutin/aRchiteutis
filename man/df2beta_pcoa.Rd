@@ -6,7 +6,11 @@
 \usage{
 df2beta_pcoa(
   df,
-  dist_function = abdiv::bray_curtis,
+  dist_function = NULL,
+  method = "bray",
+  adiv_index = "jaccard",
+  zero_replace = "cmultRepl",
+  pseudocount = 0.65,
   treshhold_up = 1,
   treshhold_down = 0,
   add_legend = FALSE,
@@ -15,10 +19,30 @@ df2beta_pcoa(
 )
 }
 \arguments{
-\item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}.}
+\item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}. A \link[phyloseq:phyloseq]{phyloseq::phyloseq} object
+or a plain taxa-by-sample matrix are also accepted (via
+\code{as_samovar_matrix()} / \code{as_samovar_df()}).}
 
 \item{dist_function}{Distance function from \pkg{abdiv}
-(default \link[abdiv:bray_curtis]{abdiv::bray_curtis}).}
+(default \code{NULL}). When supplied it always wins over \code{method}
+(backward-compatible Bray-Curtis / abdiv path).}
+
+\item{method}{Distance backend when \code{dist_function} is \code{NULL}: \code{"bray"}
+(default, Bray-Curtis via \pkg{abdiv} — the pre-existing behaviour),
+\code{"aitchison"} (compositional / Aitchison distance via
+\code{\link[robCompositions:aDist]{robCompositions::aDist()}}) or \code{"adiv"} (Jaccard-family dissimilarity via
+\code{\link[adiv:Jac]{adiv::Jac()}}).}
+
+\item{adiv_index}{For \code{method = "adiv"}, which Jaccard component to return:
+\code{"jaccard"} (total), \code{"turnover"} (species replacement) or \code{"richness"}
+(richness difference).}
+
+\item{zero_replace}{For \code{method = "aitchison"}, how zeros are replaced before
+the log-ratio transform: \code{"cmultRepl"} (Bayesian-multiplicative replacement
+via \code{\link[zCompositions:cmultRepl]{zCompositions::cmultRepl()}}, the default) or a numeric pseudocount.}
+
+\item{pseudocount}{Numeric pseudocount used for the simple multiplicative
+fallback (also used when \code{zero_replace} is numeric).}
 
 \item{treshhold_up, treshhold_down}{Upper / lower mean-abundance thresholds
 used to filter taxa.}
@@ -43,5 +67,8 @@ legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m[13][124]_", legend = legend,
                  trim_char = "_")
 df2beta_pcoa(df[df$clade == "G", ], add_legend = 7)
+if (requireNamespace("robCompositions", quietly = TRUE)) {
+  df2beta_pcoa(df[df$clade == "G", ], method = "aitchison", add_legend = 7)
+}
 
 }

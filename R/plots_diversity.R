@@ -189,16 +189,183 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin,
   }
 }
 
-# Internal helper: turn a long df into a scaled, per-sample beta-distance matrix
-df_beta_matrix <- function(df, dist_function) {
-  df %>%
-    df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
-    as.data.frame() %>%
-    lapply(function(x) x / sum(x)) %>%
-    as.data.frame() %>%
-    t() %>%
-    usedist::dist_make(dist_function) %>%
-    as.matrix()
+# ---------------------------------------------------------------------------
+# Beta-diversity distance backends
+# ---------------------------------------------------------------------------
+
+# Replace zeros in a samples x taxa count matrix so it becomes a strictly
+# positive composition, ready for log-ratio (Aitchison) analysis.
+#
+# `zero_replace` is either "cmultRepl" (Bayesian-multiplicative replacement via
+# zCompositions::cmultRepl(), a hard dependency of robCompositions) or a numeric
+# pseudocount. When cmultRepl() fails (e.g. too many all-zero / single-positive
+# columns in very sparse Kraken tables) we fall back to a simple multiplicative
+# pseudocount so the Aitchison backend never crashes on real data.
+beta_replace_zeros <- function(x, zero_replace = "cmultRepl",
+                               pseudocount = 0.65) {
+  x <- as.matrix(x)
+  storage.mode(x) <- "double"
+
+  if (all(x > 0)) {
+    return(x / rowSums(x))
+  }
+
+  if (is.numeric(zero_replace)) {
+    pseudocount <- zero_replace
+    zero_replace <- "pseudocount"
+  }
+
+  if (identical(zero_replace, "cmultRepl") &&
+      requireNamespace("zCompositions", quietly = TRUE)) {
+    repl <- tryCatch(
+      suppressWarnings(suppressMessages(
+        zCompositions::cmultRepl(x, label = 0, method = "CZM",
+                                 output = "prop", z.warning = 1,
+                                 z.delete = FALSE))),
+      error = function(e) NULL)
+    if (!is.null(repl) && all(is.finite(as.matrix(repl))) &&
+        all(as.matrix(repl) > 0)) {
+      repl <- as.matrix(repl)
+      dimnames(repl) <- dimnames(x)
+      return(repl)
+    }
+    warning("zCompositions::cmultRepl() zero replacement failed; falling back ",
+            "to a multiplicative pseudocount (", pseudocount, ").",
+            call. = FALSE)
+  }
+
+  x[x == 0] <- pseudocount
+  x / rowSums(x)
+}
+
+# Aitchison (compositional / CLR log-ratio) distance among samples via
+# robCompositions::aDist(), after zero replacement. Returns a `dist`.
+beta_dist_aitchison <- function(samples_by_taxa, zero_replace = "cmultRepl",
+                                pseudocount = 0.65) {
+  if (!requireNamespace("robCompositions", quietly = TRUE)) {
+    stop("The 'robCompositions' package is required for ",
+         "method = \"aitchison\". Install it with:\n",
+         "  install.packages(\"robCompositions\")", call. = FALSE)
+  }
+
+  x <- as.matrix(samples_by_taxa)
+  storage.mode(x) <- "double"
+  comp <- beta_replace_zeros(x, zero_replace = zero_replace,
+                             pseudocount = pseudocount)
+
+  d <- robCompositions::aDist(comp)
+  d <- stats::as.dist(as.matrix(d))
+  attr(d, "Labels") <- rownames(x)
+  d
+}
+
+# adiv Jaccard-family beta dissimilarity among samples via adiv::Jac().
+# `adiv_index` selects the Podani/Ricotta component:
+#   "jaccard" -> $J (total Jaccard dissimilarity),
+#   "turnover" -> $JRepl (species-replacement / turnover component),
+#   "richness" -> $JRich (richness-difference component).
+# Returns a `dist`.
+beta_dist_adiv <- function(samples_by_taxa, adiv_index = "jaccard") {
+  # rgl (pulled in transitively by adiv) must run headless or it aborts on a
+  # machine without OpenGL. Set this *before* the adiv namespace loads.
+  Sys.setenv(RGL_USE_NULL = "TRUE")
+  options(rgl.useNULL = TRUE)
+
+  if (!requireNamespace("adiv", quietly = TRUE)) {
+    stop("The 'adiv' package is required for method = \"adiv\". ",
+         "Install it with:\n  install.packages(\"adiv\")", call. = FALSE)
+  }
+
+  adiv_index <- match.arg(tolower(adiv_index),
+                          c("jaccard", "turnover", "richness"))
+
+  comm <- as.matrix(samples_by_taxa)
+  storage.mode(comm) <- "double"
+
+  jac <- adiv::Jac(comm)
+  d <- switch(adiv_index,
+              jaccard = jac$J,
+              turnover = jac$JRepl,
+              richness = jac$JRich)
+
+  d <- stats::as.dist(as.matrix(d))
+  attr(d, "Labels") <- rownames(comm)
+  d
+}
+
+#' Sample-by-sample beta-diversity distance dispatcher
+#'
+#' Internal-ish dispatcher shared by the `df2beta*` functions. Takes a
+#' **samples x taxa** matrix and returns a sample-by-sample [stats::dist]
+#' using the requested backend.
+#'
+#' @param samples_by_taxa Numeric matrix with samples in rows and taxa in
+#'   columns (i.e. the transpose of [df_untidy()] output).
+#' @param method Backend: `"bray"` (or any \pkg{abdiv} `dist_function`),
+#'   `"aitchison"` (compositional / Aitchison distance via
+#'   [robCompositions::aDist()]) or `"adiv"` (Jaccard-family dissimilarity via
+#'   [adiv::Jac()]).
+#' @param dist_function Optional distance function from \pkg{abdiv}. When
+#'   supplied it always wins (backward-compatible path via
+#'   [usedist::dist_make()]), regardless of `method`.
+#' @param adiv_index For `method = "adiv"`, one of `"jaccard"` (total),
+#'   `"turnover"` (replacement) or `"richness"` (richness difference).
+#' @param zero_replace For `method = "aitchison"`, `"cmultRepl"` (Bayesian
+#'   multiplicative replacement via [zCompositions::cmultRepl()]) or a numeric
+#'   pseudocount used as a simple multiplicative fallback.
+#' @param pseudocount Numeric pseudocount used when zero replacement falls back
+#'   to (or is set to) a simple multiplicative replacement.
+#'
+#' @return A [stats::dist] object of sample-by-sample distances.
+#' @keywords internal
+#' @export
+beta_dist <- function(samples_by_taxa, method = "bray", dist_function = NULL,
+                      adiv_index = "jaccard", zero_replace = "cmultRepl",
+                      pseudocount = 0.65) {
+  samples_by_taxa <- as.matrix(samples_by_taxa)
+
+  # An explicit abdiv distance function always takes precedence.
+  if (!is.null(dist_function)) {
+    return(usedist::dist_make(samples_by_taxa, dist_function))
+  }
+
+  method <- match.arg(tolower(method), c("bray", "aitchison", "adiv"))
+
+  switch(method,
+         bray = usedist::dist_make(samples_by_taxa, abdiv::bray_curtis),
+         aitchison = beta_dist_aitchison(samples_by_taxa,
+                                         zero_replace = zero_replace,
+                                         pseudocount = pseudocount),
+         adiv = beta_dist_adiv(samples_by_taxa, adiv_index = adiv_index))
+}
+
+# Internal helper: turn a long df into a per-sample beta-distance matrix.
+#
+# The default Bray-Curtis / abdiv path is preserved byte-for-byte: taxa are
+# first turned into per-sample proportions, then transposed, then handed to
+# usedist::dist_make(). The compositional / adiv backends instead operate on the
+# raw samples x taxa counts (Aitchison distance is scale invariant, and adiv's
+# Jaccard family expects abundances).
+df_beta_matrix <- function(df, dist_function = NULL, method = "bray",
+                           adiv_index = "jaccard", zero_replace = "cmultRepl",
+                           pseudocount = 0.65) {
+  untidy <- df %>%
+    df_untidy(drop_unclassified = TRUE, scale = FALSE)
+
+  if (!is.null(dist_function) || identical(tolower(method), "bray")) {
+    mat <- untidy %>%
+      as.data.frame() %>%
+      lapply(function(x) x / sum(x)) %>%
+      as.data.frame() %>%
+      t()
+    return(as.matrix(beta_dist(mat, method = "bray",
+                               dist_function = dist_function)))
+  }
+
+  sxt <- t(as.matrix(untidy))
+  as.matrix(beta_dist(sxt, method = method, dist_function = NULL,
+                      adiv_index = adiv_index, zero_replace = zero_replace,
+                      pseudocount = pseudocount))
 }
 
 #' Beta-diversity heatmap between samples
@@ -206,10 +373,26 @@ df_beta_matrix <- function(df, dist_function) {
 #' Computes a pairwise beta-diversity distance matrix between samples and draws
 #' it as a symmetric [heatmap3::heatmap3] heatmap.
 #'
-#' @param df A tidy `tibble` from [get_counts()].
+#' @param df A tidy `tibble` from [get_counts()]. A [phyloseq::phyloseq] object
+#'   or a plain taxa-by-sample matrix are also accepted (via
+#'   `as_samovar_matrix()` / `as_samovar_df()`).
 #' @param clade Character or `NULL`. Restrict to a single clade.
 #' @param dist_function Distance function from \pkg{abdiv}
-#'   (default [abdiv::bray_curtis]).
+#'   (default `NULL`). When supplied it always wins over `method`
+#'   (backward-compatible Bray-Curtis / abdiv path).
+#' @param method Distance backend when `dist_function` is `NULL`: `"bray"`
+#'   (default, Bray-Curtis via \pkg{abdiv} — the pre-existing behaviour),
+#'   `"aitchison"` (compositional / Aitchison distance via
+#'   [robCompositions::aDist()]) or `"adiv"` (Jaccard-family dissimilarity via
+#'   [adiv::Jac()]).
+#' @param adiv_index For `method = "adiv"`, which Jaccard component to return:
+#'   `"jaccard"` (total), `"turnover"` (species replacement) or `"richness"`
+#'   (richness difference).
+#' @param zero_replace For `method = "aitchison"`, how zeros are replaced before
+#'   the log-ratio transform: `"cmultRepl"` (Bayesian-multiplicative replacement
+#'   via [zCompositions::cmultRepl()], the default) or a numeric pseudocount.
+#' @param pseudocount Numeric pseudocount used for the simple multiplicative
+#'   fallback (also used when `zero_replace` is numeric).
 #' @param treshhold_up,treshhold_down Upper / lower mean-abundance thresholds
 #'   used to filter taxa.
 #' @param add_legend Integer column index/indices (or `FALSE`) drawn as colour
@@ -228,9 +411,15 @@ df_beta_matrix <- function(df, dist_function) {
 #' df <- get_counts(path = path, pattern = "m[13][124]_", trim_char = "_")
 #' d <- df2beta(df[df$clade == "G", ], print_df = TRUE)
 #' dim(d)
+#' if (requireNamespace("robCompositions", quietly = TRUE)) {
+#'   da <- df2beta(df[df$clade == "G", ], method = "aitchison", print_df = TRUE)
+#'   dim(da)
+#' }
 #'
 #' @export
-df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
+df2beta <- function(df, clade = "G", dist_function = NULL, method = "bray",
+                    adiv_index = "jaccard", zero_replace = "cmultRepl",
+                    pseudocount = 0.65,
                     treshhold_up = 1, treshhold_down = 0,
                     add_legend = FALSE, add_labels = FALSE,
                     print_df = FALSE, ...) {
@@ -273,11 +462,15 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
   df <- df[df$taxa %in% df_taxa, ]
 
   if (print_df) {
-    return(df_beta_matrix(df, dist_function))
+    return(df_beta_matrix(df, dist_function = dist_function, method = method,
+                          adiv_index = adiv_index, zero_replace = zero_replace,
+                          pseudocount = pseudocount))
   }
 
   draw <- function(df, ...) {
-    df2 <- df_beta_matrix(df, dist_function)
+    df2 <- df_beta_matrix(df, dist_function = dist_function, method = method,
+                          adiv_index = adiv_index, zero_replace = zero_replace,
+                          pseudocount = pseudocount)
     df2[1, 1] <- 1
 
     heatmap3::heatmap3(
@@ -318,6 +511,59 @@ df2beta_bray <- function(df, ...) {
   df2beta(df, dist_function = abdiv::bray_curtis, ...)
 }
 
+#' Aitchison (compositional) beta-diversity heatmap
+#'
+#' Convenience wrapper around [df2beta()] that selects the Aitchison /
+#' compositional distance backend ([robCompositions::aDist()]). Zeros are
+#' replaced before the log-ratio transform (see `zero_replace`).
+#'
+#' @inheritParams df2beta
+#' @param ... Passed to [df2beta()].
+#'
+#' @return See [df2beta()].
+#'
+#' @examples
+#' path <- system.file("extdata", package = "aRchiteutis")
+#' df <- get_counts(path = path, pattern = "m[13][124]_", trim_char = "_")
+#' if (requireNamespace("robCompositions", quietly = TRUE)) {
+#'   d <- df2beta_aitchison(df[df$clade == "G", ], print_df = TRUE)
+#'   dim(d)
+#' }
+#'
+#' @export
+df2beta_aitchison <- function(df, zero_replace = "cmultRepl",
+                              pseudocount = 0.65, ...) {
+  df2beta(df, method = "aitchison", dist_function = NULL,
+          zero_replace = zero_replace, pseudocount = pseudocount, ...)
+}
+
+#' adiv Jaccard-family beta-diversity heatmap
+#'
+#' Convenience wrapper around [df2beta()] that selects the \pkg{adiv}
+#' Jaccard-family dissimilarity backend ([adiv::Jac()]).
+#'
+#' @inheritParams df2beta
+#' @param index Which Jaccard component to use: `"jaccard"` (total),
+#'   `"turnover"` (replacement) or `"richness"` (richness difference).
+#' @param ... Passed to [df2beta()].
+#'
+#' @return See [df2beta()].
+#'
+#' @examples
+#' path <- system.file("extdata", package = "aRchiteutis")
+#' df <- get_counts(path = path, pattern = "m[13][124]_", trim_char = "_")
+#' if (requireNamespace("adiv", quietly = TRUE)) {
+#'   Sys.setenv(RGL_USE_NULL = "TRUE")
+#'   d <- df2beta_adiv(df[df$clade == "G", ], index = "jaccard",
+#'                     print_df = TRUE)
+#'   dim(d)
+#' }
+#'
+#' @export
+df2beta_adiv <- function(df, index = "jaccard", ...) {
+  df2beta(df, method = "adiv", dist_function = NULL, adiv_index = index, ...)
+}
+
 #' PCoA ordination of samples from a beta-diversity matrix
 #'
 #' @inheritParams df2beta
@@ -332,10 +578,15 @@ df2beta_bray <- function(df, ...) {
 #' df <- get_counts(path = path, pattern = "m[13][124]_", legend = legend,
 #'                  trim_char = "_")
 #' df2beta_pcoa(df[df$clade == "G", ], add_legend = 7)
+#' if (requireNamespace("robCompositions", quietly = TRUE)) {
+#'   df2beta_pcoa(df[df$clade == "G", ], method = "aitchison", add_legend = 7)
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
-df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
+df2beta_pcoa <- function(df, dist_function = NULL, method = "bray",
+                         adiv_index = "jaccard", zero_replace = "cmultRepl",
+                         pseudocount = 0.65,
                          treshhold_up = 1, treshhold_down = 0,
                          add_legend = FALSE, add_ellipse = FALSE, ...) {
 
@@ -356,13 +607,27 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
     leg2 <- NULL
   }
 
-  pcoa_df <- df %>%
-    df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
-    as.data.frame() %>%
-    t() %>%
-    usedist::dist_make(dist_function) %>%
-    as.matrix() %>%
-    ape::pcoa()
+  untidy <- df %>%
+    df_untidy(drop_unclassified = TRUE, scale = FALSE)
+
+  if (!is.null(dist_function) || identical(tolower(method), "bray")) {
+    dmat <- untidy %>%
+      as.data.frame() %>%
+      t() %>%
+      usedist::dist_make(if (is.null(dist_function)) {
+        abdiv::bray_curtis
+      } else {
+        dist_function
+      }) %>%
+      as.matrix()
+  } else {
+    dmat <- as.matrix(beta_dist(t(as.matrix(untidy)), method = method,
+                                dist_function = NULL, adiv_index = adiv_index,
+                                zero_replace = zero_replace,
+                                pseudocount = pseudocount))
+  }
+
+  pcoa_df <- ape::pcoa(dmat)
 
   vectors <- as.data.frame(pcoa_df$vectors)
   vectors$leg1 <- forcats::fct_inorder(factor(leg1))

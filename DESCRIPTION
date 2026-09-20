@@ -47,12 +47,15 @@ Imports:
     utils,
     viridis
 Suggests:
+    adiv,
     ggviolinbox,
     NetCoMi,
     phyloseq,
+    robCompositions,
     testthat (>= 3.0.0),
     vdiffr,
-    withr
+    withr,
+    zCompositions
 Remotes:
     dsmutin/ggviolinbox,
     stefpeschel/NetCoMi

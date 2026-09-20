@@ -7,7 +7,9 @@
 df2beta_bray(df, ...)
 }
 \arguments{
-\item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}.}
+\item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}. A \link[phyloseq:phyloseq]{phyloseq::phyloseq} object
+or a plain taxa-by-sample matrix are also accepted (via
+\code{as_samovar_matrix()} / \code{as_samovar_df()}).}
 
 \item{...}{Passed to \code{\link[=df2beta]{df2beta()}}.}
 }

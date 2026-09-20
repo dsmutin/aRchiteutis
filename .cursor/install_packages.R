@@ -27,6 +27,11 @@ pkgs <- c(
   "circlize", "factoextra", "ggraph", "igraph",
   ## tidygraph -> ggraph engine (df2graph / df2ggraph)
   "tidygraph",
+  ## Vignette toolchain (Suggests): knitr + rmarkdown build the HTML usage
+  ## vignettes, ggpubr styles the statistical plots (ggviolin/ggboxplot +
+  ## stat_compare_means) and vegan::adonis2() runs the PERMANOVA beta-diversity
+  ## group test. (pandoc, required by rmarkdown, is installed via apt below.)
+  "knitr", "rmarkdown", "ggpubr", "vegan",
   ## additional packages used by the plot/diversity functions
   "abdiv",      # alpha/beta diversity metrics + bray_curtis
   "usedist",    # dist_make() used by df2beta
@@ -50,11 +55,12 @@ pkgs <- c(
 ## headless machine rgl only loads with RGL_USE_NULL=TRUE, but the shared
 ## libraries must still be present. Installed idempotently; failures are
 ## non-fatal (apt may be unavailable in some environments).
+## `pandoc` is additionally required by rmarkdown to knit the HTML vignettes.
 if (Sys.info()[["sysname"]] == "Linux" && nzchar(Sys.which("apt-get"))) {
-  gl_libs <- c("libgl1-mesa-dev", "libglu1-mesa-dev", "libx11-dev")
+  sys_libs <- c("libgl1-mesa-dev", "libglu1-mesa-dev", "libx11-dev", "pandoc")
   try(system(paste(
     "sudo apt-get install -y --no-install-recommends",
-    paste(gl_libs, collapse = " ")), ignore.stdout = TRUE,
+    paste(sys_libs, collapse = " ")), ignore.stdout = TRUE,
     ignore.stderr = TRUE), silent = TRUE)
 }
 

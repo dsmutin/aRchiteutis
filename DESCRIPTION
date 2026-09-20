@@ -48,14 +48,19 @@ Imports:
     viridis
 Suggests:
     adiv,
+    ggpubr,
     ggviolinbox,
+    knitr,
     NetCoMi,
     phyloseq,
+    rmarkdown,
     robCompositions,
     testthat (>= 3.0.0),
     vdiffr,
+    vegan,
     withr,
     zCompositions
+VignetteBuilder: knitr
 Remotes:
     dsmutin/ggviolinbox,
     stefpeschel/NetCoMi

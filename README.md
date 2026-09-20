@@ -61,6 +61,7 @@ df2composition(df)
 - `tests/testthat/` — a `testthat` (3rd edition) suite with at least one test
   for every visualisation function.
 - `.github/workflows/R-CMD-check.yaml` — package check on GitHub Actions.
+- `.cursor/skills/` — agent skills for each pipeline step plus the full `aRchiteutis` path.
 - `pipeline.R` / `test/pipeline.R` — end-to-end usage walkthroughs.
 
 Enjoy beauty of R plots!

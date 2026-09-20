@@ -45,6 +45,7 @@ Imports:
     utils,
     viridis
 Suggests:
+    reticulate,
     testthat (>= 3.0.0),
     vdiffr,
     withr

@@ -22,7 +22,7 @@ NULL
 # summary columns produced by summarise().
 utils::globalVariables(c(
   # raw get_counts() columns
-  "taxa", "clade", "sample", "N", "amount", "amount_cl",
+  "taxa", "clade", "sample", "N", "amount", "amount_cl", ".total",
   # summarise() output columns referenced by backtick name
   "sum(N)", "mean(amount)", "mean(amount_cl)",
   # reshaped / plotting columns

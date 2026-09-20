@@ -50,3 +50,11 @@ df2pca_sample(df_untidy(df, clade = "S", scale = "scale",
                         keep_sample_name = FALSE),
               scale = FALSE, detect = "pupa")
 df2pca_sp(df_untidy(df, clade = "G", top = 10), scale = TRUE)
+
+# python2r: abundance table loaded in Python, plotted in R ----
+# In Python:  python3 inst/python/python2r.py my_table.csv abundance.csv
+# (or `from python2r import export_abundance` in a notebook)
+py_csv <- system.file("extdata", "python_abundance.csv", package = "aRchiteutis")
+df_py <- python2r(py_csv, clade = "G")
+df2composition(df_py)
+df2barplot(df_py)

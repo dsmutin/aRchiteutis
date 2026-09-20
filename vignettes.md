@@ -2,7 +2,8 @@
 
 Every `df2*` plot in the package, rendered on the bundled honey-bee brood
 Kraken2 reports (`inst/extdata`). Copy the snippets, then swap in your own
-tidy table from `get_counts()`.
+tidy table from `get_counts()`, `from_abundance()`, `from_phyloseq()`, or
+`python2r()`.
 
 ```r
 library(aRchiteutis)

@@ -39,12 +39,25 @@ df <- get_counts(path = path, pattern = "decont_b", legend = legend,
                  trim_char = "_")
 ```
 
+Already have a taxa-by-sample table (or one loaded in Python / phyloseq)?
+Skip Kraken parsing and go straight to the plots:
+
+```r
+df <- from_abundance(count_matrix, clade = "G")     # taxa x samples
+df <- from_phyloseq(physeq, taxa_rank = "Genus")    # phyloseq object or list
+df <- python2r("abundance.csv", clade = "G")        # CSV dumped from Python
+# python3 inst/python/python2r.py my_table.csv abundance.csv
+df2composition(df)
+```
+
 ## Structure
 
 - `R/` — package source. Data-preparation helpers live in
-  `R/get_counts.R` and `R/df_transforms.R`; the plotting functions are grouped
+  `R/get_counts.R`, `R/df_transforms.R` and `R/from_table.R` (`from_abundance`,
+  `from_phyloseq`, `python2r`); the plotting functions are grouped
   into `R/plots_composition.R`, `R/plots_diversity.R` and
   `R/plots_ordination.R`.
+- `inst/python/python2r.py` — export a pandas / numpy table for `python2r()`.
 - `tests/testthat/` — a `testthat` (3rd edition) suite with at least one test
   for every visualisation function.
 - `.github/workflows/R-CMD-check.yaml` — package check on GitHub Actions.

@@ -306,8 +306,10 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
                      angle = angle, hjust = hjust), fontface = "italic") +
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_manual(values = viridis::viridis(k_means),
-                                      na.value = "transparent") +
-      ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), na.value = 0) +
+                                      na.value = "transparent",
+                                      guide = "none") +
+      ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), na.value = 0,
+                                          guide = "none") +
       ggplot2::coord_fixed() +
       ggplot2::theme_void() +
       ggplot2::expand_limits(x = c(-3, 3), y = c(-3, 3))
@@ -334,8 +336,9 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_gradient2(low = "red", mid = "white",
                                          high = "blue",
-                                         na.value = "transparent") +
-      ggraph::scale_edge_alpha_continuous(range = c(0, 0.5)) +
+                                         na.value = "transparent",
+                                         guide = "none") +
+      ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), guide = "none") +
       ggplot2::coord_fixed() +
       ggplot2::theme_void() +
       ggplot2::expand_limits(x = c(-3, 3), y = c(-3, 3))

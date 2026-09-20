@@ -108,7 +108,7 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
 
     p <- ggplot2::ggplot(gg, ggplot2::aes(y = .data$value, x = .data$split))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = FALSE, draw_quantiles = 0.5,
+      ggplot2::geom_violin(trim = FALSE,
                            ggplot2::aes(fill = .data$split), alpha = 0.3)
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0,
@@ -128,7 +128,7 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
   } else {
     p <- ggplot2::ggplot(gg, ggplot2::aes(x = .data$value, y = .data$name))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = FALSE, draw_quantiles = 0.5)
+      ggplot2::geom_violin(trim = FALSE)
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0)
     }

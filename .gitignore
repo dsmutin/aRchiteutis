@@ -1,0 +1,11 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+Rplots.pdf
+*.Rcheck/
+*.tar.gz
+
+# Editor / OS
+.DS_Store

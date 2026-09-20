@@ -1,0 +1,341 @@
+---
+title: "Start-to-end analysis with aRchiteutis"
+author: "aRchiteutis"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Start-to-end analysis with aRchiteutis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 5,
+  dpi = 100,
+  dev = "png"
+)
+
+# adiv pulls in rgl, which must run headless in a vignette build.
+Sys.setenv(RGL_USE_NULL = "TRUE")
+options(rgl.useNULL = TRUE)
+set.seed(1)
+
+library(aRchiteutis)
+library(ggplot2)
+
+# LIGHT theme + viridis everywhere. ggpubr is a Suggests dependency; when it is
+# available we adopt its publication-ready light theme as the global default,
+# otherwise we fall back to theme_light(). Every custom chunk below layers a
+# viridis palette on top so we never fall back to ggplot2's default hues.
+have_ggpubr <- requireNamespace("ggpubr", quietly = TRUE)
+if (have_ggpubr) {
+  ggplot2::theme_set(ggpubr::theme_pubr())
+} else {
+  ggplot2::theme_set(ggplot2::theme_light())
+}
+```
+
+`aRchiteutis` (formerly the *samovar* collection of scripts) is a toolkit for
+parsing, transforming and visualising the taxonomic-composition tables produced
+by [Kraken2](https://ccb.jhu.edu/software/kraken2/) (and Kaiju / Bracken)
+metagenomic classifiers. This vignette walks through a complete analysis of the
+example honey-bee gut dataset shipped with the package: from reading the raw
+classifier reports, through composition, alpha- and beta-diversity, ordination
+and differential abundance, all the way to a co-occurrence network — with a
+statistical comparison of the two developmental stages (larvae vs pupa) at each
+step.
+
+Throughout we keep the styling consistent: a light theme
+(`ggpubr::theme_pubr()`), the colour-blind-friendly **viridis** palette for all
+colours and fills, and [`ggpubr`](https://rpkgs.datanovia.com/ggpubr/) for the
+statistical layers (`stat_compare_means()` significance annotations).
+
+# 1. Load and inspect the data
+
+The package ships 17 Kraken2 bacterial reports in `inst/extdata/`, one per
+sample, plus a `legend.csv` describing each sample's developmental `stage`
+(larvae / pupa) and `hive` (1 / 2). We read them all with `get_counts()`,
+splitting each file name on `"_"` so the sample id becomes e.g. `m11`, and
+joining the legend on.
+
+```{r load}
+path <- system.file("extdata", package = "aRchiteutis")
+legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+
+df <- get_counts(
+  path = path,
+  pattern = "_decont_bacteria_k2",
+  legend = legend,
+  trim_char = "_"
+)
+
+df
+```
+
+The result is one long (tidy) row per taxon per sample. The first six columns
+have fixed positions — `taxa`, `clade`, `sample`, `N` (reads), `amount`
+(fraction of all reads) and `amount_cl` (fraction of classified reads) —
+followed by the legend columns (`stage` in column 7, `hive` in column 8), which
+downstream functions reference by index.
+
+```{r inspect}
+# Sample metadata (one row per sample).
+meta <- unique(df[, c("sample", "stage", "hive")])
+meta
+
+# How many samples per stage?
+table(meta$stage)
+
+# Number of distinct taxa recorded at each Kraken clade level.
+tapply(df$taxa, df$clade, function(x) length(unique(x)))
+
+# Total classified reads per stage (root rows, clade "R").
+aggregate(N ~ stage, data = df[df$clade == "R", ], FUN = sum)
+```
+
+# 2. Transform the table
+
+The `df_*` helpers reshape the tidy table. The most common operations are:
+keeping the most abundant taxa, dropping unclassified rows, and rescaling
+per-sample amounts back to one.
+
+```{r transforms}
+# Genus-level view, top 8 genera by mean abundance (rolls the rest into
+# "other <domain>"), unclassified rows dropped.
+df_top <- df_taxa_trim(df[df$clade != "S", ], top_taxa = 8)
+
+# Drop unclassified taxa and rescale amounts to sum to one per sample.
+df_clean <- df_rescale(df_tidy_drop_unclassified(df))
+
+# A taxa-by-sample matrix of the top 12 genera, for the matrix-oriented plots.
+mat_g <- df_untidy(df, clade = "G", top = 12)
+dim(mat_g)
+```
+
+# 3. Composition
+
+Three complementary views of *what is there*. `df2donut()` shows the mean
+composition across all samples, `df2composition()` stacks each sample, and
+`df2barplot()` shows the per-taxon distribution. All three already use viridis
+internally.
+
+```{r composition-donut, fig.height = 5}
+df2donut(df_top)
+```
+
+```{r composition-stack, fig.height = 5}
+df2composition(df_top)
+```
+
+```{r composition-box, fig.height = 5}
+df2barplot(df_top)
+```
+
+`df2barplot()` (and the alpha-diversity plots) can also draw a combined
+half-violin / half-boxplot via the optional
+[`ggviolinbox`](https://github.com/dsmutin/ggviolinbox) package. The chunk below
+only runs when that package is installed.
+
+```{r composition-violinbox, eval = requireNamespace("ggviolinbox", quietly = TRUE), fig.height = 5}
+df2barplot(df_top, violinbox = TRUE)
+```
+
+# 4. Alpha diversity
+
+`df2alpha_summary()` computes a broad panel of alpha-diversity indices per
+sample and shows them split by a legend variable; `df2alpha()` does the same for
+a chosen shortlist. Here we split by `stage` (column 7) and colour by `hive`
+(column 8).
+
+```{r alpha-panel, fig.height = 6}
+df_sp <- df[df$clade == "S", ]
+df2alpha(df_sp, split_by = 7, add_legend = 8)
+```
+
+## 4.1 Statistics: larvae vs pupa
+
+To formally compare the two stages we compute the Shannon and Simpson indices
+per sample (with `abdiv`) and test the group difference with a Wilcoxon
+rank-sum test, annotated directly on the plot with
+`ggpubr::stat_compare_means()`. Fills use viridis and the theme is light.
+
+```{r alpha-table}
+alpha_tab <- df_sp %>%
+  dplyr::group_by(sample) %>%
+  dplyr::summarise(
+    Shannon = abdiv::shannon(N),
+    Simpson = abdiv::simpson(N),
+    .groups = "drop"
+  )
+alpha_tab <- dplyr::left_join(alpha_tab, meta, by = "sample")
+alpha_long <- tidyr::pivot_longer(alpha_tab, c("Shannon", "Simpson"),
+                                  names_to = "index", values_to = "value")
+head(alpha_tab)
+```
+
+```{r alpha-stats, eval = requireNamespace("ggpubr", quietly = TRUE), fig.height = 4.5}
+ggpubr::ggviolin(
+  alpha_long, x = "stage", y = "value", fill = "stage",
+  palette = viridis::viridis(2), alpha = 0.7,
+  add = "jitter", add.params = list(color = "grey30", size = 1.5),
+  facet.by = "index", scales = "free_y"
+) +
+  ggpubr::stat_compare_means(
+    ggplot2::aes(label = ggplot2::after_stat(p.format)),
+    method = "wilcox.test", label.x.npc = "center"
+  ) +
+  labs(x = NULL, y = "Diversity index")
+```
+
+The p-value printed above each panel is the Wilcoxon test comparing larvae with
+pupa for that index.
+
+# 5. Beta diversity
+
+Beta diversity measures how different samples are from one another.
+`df2beta_pcoa()` builds a sample-by-sample distance matrix and ordinates it with
+PCoA. It supports three backends via `method`:
+
+* `"bray"` — Bray-Curtis on proportions (the classic default);
+* `"aitchison"` — compositional / log-ratio distance
+  (`robCompositions::aDist()`, with zero replacement);
+* `"adiv"` — Jaccard-family dissimilarity (`adiv::Jac()`).
+
+We colour points by `stage` (column 7) and draw grouping ellipses.
+
+```{r beta-bray, fig.height = 5}
+df_g <- df[df$clade == "G", ]
+df2beta_pcoa(df_g, method = "bray", add_legend = 7, add_ellipse = 7)
+```
+
+```{r beta-aitchison, eval = requireNamespace("robCompositions", quietly = TRUE), fig.height = 5}
+df2beta_pcoa(df_g, method = "aitchison", add_legend = 7, add_ellipse = 7)
+```
+
+```{r beta-adiv, eval = requireNamespace("adiv", quietly = TRUE), fig.height = 5}
+df2beta_pcoa(df_g, method = "adiv", add_legend = 7, add_ellipse = 7)
+```
+
+## 5.1 Statistics: PERMANOVA
+
+`df2beta(..., print_df = TRUE)` returns the raw distance matrix, which we can
+feed to `vegan::adonis2()` for a PERMANOVA test of whether stage explains a
+significant fraction of the between-sample variance.
+
+```{r beta-dist}
+d_bray <- stats::as.dist(df2beta(df_g, method = "bray", print_df = TRUE))
+grp <- meta$stage[match(labels(d_bray), meta$sample)]
+```
+
+```{r beta-permanova, eval = requireNamespace("vegan", quietly = TRUE)}
+set.seed(1)
+vegan::adonis2(d_bray ~ grp)
+```
+
+## 5.2 A polished PCoA scatter
+
+For full control over styling we can ordinate the Bray-Curtis distance
+ourselves with `ape::pcoa()` and draw it with `ggpubr::ggscatter()`, adding
+confidence ellipses and group mean points in viridis.
+
+```{r beta-ggscatter, eval = requireNamespace("ggpubr", quietly = TRUE), fig.height = 5}
+pcoa <- ape::pcoa(as.matrix(df2beta(df_g, method = "bray", print_df = TRUE)))
+scores <- as.data.frame(pcoa$vectors[, 1:2])
+names(scores) <- c("PCoA1", "PCoA2")
+scores$sample <- rownames(scores)
+scores <- dplyr::left_join(scores, meta, by = "sample")
+
+ggpubr::ggscatter(
+  scores, x = "PCoA1", y = "PCoA2",
+  color = "stage", palette = viridis::viridis(2),
+  ellipse = TRUE, ellipse.type = "norm", mean.point = TRUE,
+  size = 3, alpha = 0.85
+) +
+  labs(title = "Bray-Curtis PCoA")
+```
+
+# 6. Ordination, clustering and correlation
+
+The matrix-oriented plots operate on a taxa-by-sample matrix such as `mat_g`.
+
+`df2pca_sample()` runs a PCA of the samples. Encoding the legend into the column
+names lets us colour the individuals by stage.
+
+```{r pca-sample, fig.height = 5}
+mat_g_enc <- df_untidy(df, clade = "G", top = 12, keep_sample_name = FALSE)
+df2pca_sample(mat_g_enc, detect = "pupa", detect2 = "larvae") +
+  scale_color_viridis_d(end = 0.85)
+```
+
+`df2heatmap()` draws a base-graphics heatmap (viridis colour scale)...
+
+```{r heatmap, fig.height = 6}
+df2heatmap(mat_g, scale = "row", Colv = NA)
+```
+
+...and `df2corrplot()` a clustered taxa-by-taxa correlation plot.
+
+```{r corrplot, fig.height = 6}
+df2corrplot(mat_g, k_means = 3)
+```
+
+t-SNE (`df2tsne()`) is available for larger taxa sets. It is iterative and can
+be slow, so we show the call but leave it un-evaluated in this quick build.
+
+```{r tsne, eval = FALSE}
+mat_tsne <- df_untidy(df, clade = "G", top = 40, scale = "scale")
+set.seed(1)
+df2tsne(mat_tsne, k_means = 4, text_top = 5, perplexity = 5, max_iter = 300)
+```
+
+# 7. Differential abundance
+
+`df2volcano()` runs a per-taxon *t*-test between two sample groups and plots the
+log abundance change against the p-value. Here we contrast pupa with larvae at
+the genus level.
+
+```{r volcano, fig.height = 5}
+df2volcano(df_g, legend_detect = c("pupa", "larvae"))
+```
+
+# 8. Co-occurrence networks
+
+`df2graph()` turns a taxa-by-sample matrix into an annotated
+`tidygraph::tbl_graph` (node centralities + community membership, signed
+correlation edges) and `df2ggraph()` draws it with `ggraph` — communities in
+viridis, edges coloured by the sign of the correlation.
+
+```{r network, fig.height = 6}
+mat_net <- df_untidy(df, clade = "G", top = 15, scale = "scale")
+set.seed(1)
+df2ggraph(mat_net, threshold = 0.3)
+```
+
+## 8.1 NetCoMi networks (optional)
+
+For association networks with dedicated microbiome methods (SparCC, SPIEC-EASI,
+SPRING, ...), `df2netcomi()` wraps [`NetCoMi`](https://github.com/stefpeschel/NetCoMi),
+and `df2netcomi_graph()` bridges the result into the *same* `df2ggraph()` engine
+for a consistent look. `NetCoMi` is a heavy optional dependency, so the chunk
+below is shown for reference but not evaluated; install `NetCoMi` and set
+`eval = TRUE` to run it.
+
+```{r netcomi, eval = FALSE}
+res <- df2netcomi(mat_net, measure = "pearson", thresh = 0.3)
+res$props                                 # network summary statistics
+df2netcomi_graph(res, plot = TRUE)        # drawn with df2ggraph()
+```
+
+# Session info
+
+```{r session}
+sessionInfo()
+```

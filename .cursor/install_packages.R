@@ -36,8 +36,27 @@ pkgs <- c(
   "ggforce",    # geom_mark_ellipse() used by df2beta_pcoa
   "tsne",       # df2tsne
   ## Bioconductor: phyloseq interoperability (ps2df / df2ps)
-  "phyloseq"
+  "phyloseq",
+  ## Optional beta-diversity backends (Suggests): compositional / Aitchison
+  ## distance (robCompositions::aDist + zCompositions::cmultRepl for zero
+  ## replacement) and the adiv Jaccard family (adiv::Jac). Both are CRAN
+  ## binaries. `adiv` Imports rgl (needs OpenGL) and phytools; loading it on a
+  ## headless box requires RGL_USE_NULL=TRUE (set in tests and in the guarded
+  ## runtime code) plus the GL system libraries installed below.
+  "robCompositions", "zCompositions", "adiv"
 )
+
+## System GL libraries required by rgl (a transitive dependency of adiv). On a
+## headless machine rgl only loads with RGL_USE_NULL=TRUE, but the shared
+## libraries must still be present. Installed idempotently; failures are
+## non-fatal (apt may be unavailable in some environments).
+if (Sys.info()[["sysname"]] == "Linux" && nzchar(Sys.which("apt-get"))) {
+  gl_libs <- c("libgl1-mesa-dev", "libglu1-mesa-dev", "libx11-dev")
+  try(system(paste(
+    "sudo apt-get install -y --no-install-recommends",
+    paste(gl_libs, collapse = " ")), ignore.stdout = TRUE,
+    ignore.stderr = TRUE), silent = TRUE)
+}
 
 installed <- rownames(installed.packages())
 to_install <- setdiff(pkgs, installed)

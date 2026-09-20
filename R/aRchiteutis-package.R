@@ -1,4 +1,5 @@
 #' @keywords internal
+#' @importFrom methods as is
 "_PACKAGE"
 
 #' Pipe operator

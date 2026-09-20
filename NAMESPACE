@@ -51,4 +51,8 @@ importFrom(abdiv,
   strong
 )
 importFrom(magrittr,"%>%")
+importFrom(methods,
+  as,
+  is
+)
 importFrom(rlang,.data)

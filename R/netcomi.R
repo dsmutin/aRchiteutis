@@ -61,7 +61,10 @@
 #' @param seed Integer random seed for reproducibility (default `42`).
 #' @param netConstruct_args,netAnalyze_args Optional named lists of extra
 #'   arguments forwarded to `NetCoMi::netConstruct()` / `NetCoMi::netAnalyze()`.
-#' @param ... Passed to [as_samovar_matrix()].
+#'   `netAnalyze()` is called with `graphlet = FALSE` by default (faster, fewer
+#'   optional dependencies); pass `netAnalyze_args = list(graphlet = TRUE)` to
+#'   enable the graphlet-correlation analysis.
+#' @param ... Passed to the internal matrix coercion (see [df_untidy()]).
 #'
 #' @return A list with elements `net` (the `microNet` object from
 #'   `netConstruct()`) and `props` (the `microNetProps` object from
@@ -98,7 +101,11 @@ df2netcomi <- function(df, clade = "G", measure = "pearson", top = FALSE,
     netConstruct_args)
   net <- do.call(NetCoMi::netConstruct, nc_args)
 
-  na_args <- utils::modifyList(list(net = net), netAnalyze_args)
+  # Default to graphlet = FALSE: the graphlet-correlation (GCM) analysis is
+  # mainly for comparing two networks, is comparatively slow, and pulls extra
+  # optional dependencies. Callers can re-enable it via netAnalyze_args.
+  na_args <- utils::modifyList(list(net = net, graphlet = FALSE),
+                               netAnalyze_args)
   props <- do.call(NetCoMi::netAnalyze, na_args)
 
   list(net = net, props = props)

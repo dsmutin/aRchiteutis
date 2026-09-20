@@ -106,7 +106,7 @@
 #'   `"leading_eigen"`, `"edge_betweenness"` or `"components"`.
 #' @param top Integer or `FALSE`. Keep only the `top` most abundant taxa when
 #'   reducing a `df` / phyloseq object (ignored for a bare matrix).
-#' @param ... Passed to [as_samovar_matrix()].
+#' @param ... Passed to the internal matrix coercion (see [df_untidy()]).
 #'
 #' @return A [tidygraph::tbl_graph] with the nodes context active.
 #'
@@ -148,7 +148,8 @@ df2graph <- function(df, clade = "G", cor_method = "pearson", threshold = 0.3,
 #' @param label Logical. Draw taxon labels.
 #' @param label_size Numeric. Label text size.
 #' @param node_alpha Numeric. Node point alpha.
-#' @param ... Passed to [df2graph()] when `x` is not already a `tbl_graph`.
+#' @param ... Passed to [df2graph()] when `x` is not already a
+#'   [tidygraph::tbl_graph].
 #'
 #' @return A [ggplot2::ggplot] object (a \pkg{ggraph} plot).
 #'

@@ -36,7 +36,7 @@ object to a matrix (default \code{"G"}, genus).}
 \item{top}{Integer or \code{FALSE}. Keep only the \code{top} most abundant taxa when
 reducing a \code{df} / phyloseq object (ignored for a bare matrix).}
 
-\item{...}{Passed to \code{\link[=as_samovar_matrix]{as_samovar_matrix()}}.}
+\item{...}{Passed to the internal matrix coercion (see \code{\link[=df_untidy]{df_untidy()}}).}
 }
 \value{
 A \link[tidygraph:tbl_graph]{tidygraph::tbl_graph} with the nodes context active.

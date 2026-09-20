@@ -43,9 +43,12 @@ reducing a \code{df} / phyloseq object.}
 \item{seed}{Integer random seed for reproducibility (default \code{42}).}
 
 \item{netConstruct_args, netAnalyze_args}{Optional named lists of extra
-arguments forwarded to \code{NetCoMi::netConstruct()} / \code{NetCoMi::netAnalyze()}.}
+arguments forwarded to \code{NetCoMi::netConstruct()} / \code{NetCoMi::netAnalyze()}.
+\code{netAnalyze()} is called with \code{graphlet = FALSE} by default (faster, fewer
+optional dependencies); pass \code{netAnalyze_args = list(graphlet = TRUE)} to
+enable the graphlet-correlation analysis.}
 
-\item{...}{Passed to \code{\link[=as_samovar_matrix]{as_samovar_matrix()}}.}
+\item{...}{Passed to the internal matrix coercion (see \code{\link[=df_untidy]{df_untidy()}}).}
 }
 \value{
 A list with elements \code{net} (the \code{microNet} object from

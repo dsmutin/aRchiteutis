@@ -29,7 +29,8 @@ first.}
 
 \item{node_alpha}{Numeric. Node point alpha.}
 
-\item{...}{Passed to \code{\link[=df2graph]{df2graph()}} when \code{x} is not already a \code{tbl_graph}.}
+\item{...}{Passed to \code{\link[=df2graph]{df2graph()}} when \code{x} is not already a
+\link[tidygraph:tbl_graph]{tidygraph::tbl_graph}.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object (a \pkg{ggraph} plot).

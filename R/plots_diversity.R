@@ -108,8 +108,14 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
 
     p <- ggplot2::ggplot(gg, ggplot2::aes(y = .data$value, x = .data$split))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = TRUE, scale = "width",
-                           ggplot2::aes(fill = .data$split), alpha = 0.3)
+      list(
+        ggplot2::geom_violin(trim = TRUE, scale = "width",
+                             ggplot2::aes(fill = .data$split), alpha = 0.35,
+                             colour = "grey35"),
+        ggplot2::geom_boxplot(width = 0.14, outlier.shape = NA,
+                              fill = "white", colour = "grey20",
+                              show.legend = FALSE)
+      )
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0,
                             ggplot2::aes(fill = .data$split), alpha = 0.3)
@@ -142,7 +148,13 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
   } else {
     p <- ggplot2::ggplot(gg, ggplot2::aes(x = .data$value, y = .data$name))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = TRUE, scale = "width")
+      list(
+        ggplot2::geom_violin(trim = TRUE, scale = "width",
+                             fill = "grey80", colour = "grey35", alpha = 0.6),
+        ggplot2::geom_boxplot(width = 0.14, outlier.shape = NA,
+                              fill = "white", colour = "grey20",
+                              show.legend = FALSE)
+      )
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0)
     }

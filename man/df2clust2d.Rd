@@ -30,7 +30,9 @@ is supplied only the first element is used for the split.}
 
 \item{top}{Integer or \code{FALSE}. Keep only the \code{top} most abundant taxa.}
 
-\item{log2_scale}{Logical. Use \code{log2(x + 1)} instead of z-scaling.}
+\item{log2_scale}{Logical. Use a log2 axis instead of log10. Axes are always
+logarithmic scales of mean abundance, not a linear plot of pre-transformed
+values.}
 
 \item{...}{Reserved for future use.}
 }

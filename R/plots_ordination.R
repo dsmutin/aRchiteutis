@@ -154,7 +154,9 @@ df2cluster <- function(df, k_means = 2, use = "sp") {
 #' @param k_means Integer. Number of clusters.
 #' @param counts Logical. Use raw counts (`N`) instead of `amount`.
 #' @param top Integer or `FALSE`. Keep only the `top` most abundant taxa.
-#' @param log2_scale Logical. Use `log2(x + 1)` instead of z-scaling.
+#' @param log2_scale Logical. Use a log2 axis instead of log10. Axes are always
+#'   logarithmic scales of mean abundance, not a linear plot of pre-transformed
+#'   values.
 #' @param ... Reserved for future use.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -178,26 +180,51 @@ df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
   mat[is.na(mat)] <- 0
   rdf <- rownames(mat)
 
-  if (log2_scale) {
-    mat <- log2(mat + 1)
-  } else {
-    mat <- scale(mat)
-  }
-  rownames(mat) <- rdf
-
-  clust_res <- stats::hclust(stats::dist(mat), method = "ward.D2")
-  groups <- stats::cutree(clust_res, k = k_means)
-
   idx1 <- which(stringr::str_detect(colnames(mat), legend_detect[1]))
   idx2 <- which(stringr::str_detect(colnames(mat), legend_detect[1],
                                     negate = TRUE))
+  if (!length(idx1) || !length(idx2)) {
+    stop("`legend_detect` did not split the samples into two non-empty groups.")
+  }
+
+  # Cluster in log space, but plot the means on a real log axis.
+  pos <- mat[mat > 0]
+  floor_val <- if (length(pos)) min(pos) / 2 else 1e-6
+  clust_mat <- log10(mat + floor_val)
+  rownames(clust_mat) <- rdf
+  clust_res <- stats::hclust(stats::dist(clust_mat), method = "ward.D2")
+  groups <- stats::cutree(clust_res, k = k_means)
 
   res <- data.frame(
     name = rdf,
     x = rowMeans(mat[, idx1, drop = FALSE]),
     y = rowMeans(mat[, idx2, drop = FALSE]),
     cluster = groups)
+  res$x[res$x <= 0] <- floor_val
+  res$y[res$y <= 0] <- floor_val
   res$name[abs(res$x / res$y) < 1.1 & abs(res$x / res$y) > (1 / 1.1)] <- NA
+
+  group_title <- function(cols, fallback) {
+    tok <- vapply(strsplit(cols, "_"), function(z) z[[1]], character(1))
+    tok <- unique(tok[nzchar(tok)])
+    if (!length(tok)) fallback else paste(tok, collapse = ", ")
+  }
+  x_title <- if (length(legend_detect) >= 1 && nzchar(legend_detect[1])) {
+    legend_detect[1]
+  } else {
+    group_title(colnames(mat)[idx1], "group 1")
+  }
+  y_title <- if (length(legend_detect) >= 2 && nzchar(legend_detect[2])) {
+    legend_detect[2]
+  } else {
+    group_title(colnames(mat)[idx2], "other")
+  }
+
+  log_scale <- if (isTRUE(log2_scale)) {
+    list(ggplot2::scale_x_log2(), ggplot2::scale_y_log2())
+  } else {
+    list(ggplot2::scale_x_log10(), ggplot2::scale_y_log10())
+  }
 
   ggplot2::ggplot(res, ggplot2::aes(.data$x, .data$y)) +
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = 2,
@@ -209,7 +236,10 @@ df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
       point.padding = 0.3, min.segment.length = 0, seed = 1,
       na.rm = TRUE) +
     ggplot2::scale_color_continuous("Cluster", type = "viridis") +
+    log_scale +
     ggplot2::coord_fixed(clip = "off") +
+    ggplot2::xlab(x_title) +
+    ggplot2::ylab(y_title) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(plot.margin = ggplot2::margin(16, 16, 16, 16))
 }
@@ -297,6 +327,9 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
   angle <- 90 - 360 * 0:(ldfr - 1) / ldfr
   hjust <- ifelse(angle < -90, 1, 0)
   angle <- ifelse(angle < -90, angle + 180, angle)
+  lab_size <- max(1.55, min(2.6, 48 / ldfr))
+  lab_r <- if (ldfr > 20) 1.55 else 1.38
+  lab_pad <- if (ldfr > 20) 5 else 3.4
 
   vals <- unlist(vertices[-h_remove, 2])
 
@@ -326,9 +359,10 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
       ggraph::geom_node_text(
-        ggplot2::aes(x = .data$x * 1.38, y = .data$y * 1.38, label = .data$name,
+        ggplot2::aes(x = .data$x * lab_r, y = .data$y * lab_r, label = .data$name,
                      angle = angle, hjust = hjust),
-        size = 2.6, fontface = "italic", check_overlap = TRUE) +
+        size = lab_size, fontface = "italic",
+        check_overlap = ldfr > 36) +
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_manual(values = viridis::viridis(k_means),
                                       na.value = "transparent",
@@ -338,7 +372,7 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
       ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
       ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
-      ggplot2::expand_limits(x = c(-3.4, 3.4), y = c(-3.4, 3.4))
+      ggplot2::expand_limits(x = c(-lab_pad, lab_pad), y = c(-lab_pad, lab_pad))
   } else {
     if (!isFALSE(coenf_level)) {
       if (coenf == "upper") {
@@ -357,9 +391,10 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
       ggraph::geom_node_text(
-        ggplot2::aes(x = .data$x * 1.38, y = .data$y * 1.38, label = .data$name,
+        ggplot2::aes(x = .data$x * lab_r, y = .data$y * lab_r, label = .data$name,
                      angle = angle, hjust = hjust),
-        size = 2.6, fontface = "italic", check_overlap = TRUE) +
+        size = lab_size, fontface = "italic",
+        check_overlap = ldfr > 36) +
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_gradient2(low = "red", mid = "white",
                                          high = "blue",
@@ -369,7 +404,7 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
       ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
       ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
-      ggplot2::expand_limits(x = c(-3.4, 3.4), y = c(-3.4, 3.4))
+      ggplot2::expand_limits(x = c(-lab_pad, lab_pad), y = c(-lab_pad, lab_pad))
   }
 }
 

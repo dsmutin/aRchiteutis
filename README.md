@@ -72,7 +72,7 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/cluster1.png" alt="Taxon dendrogram" width="480"><img src="img/cluster2.png" alt="Sample dendrogram" width="420">
 
-`df2clust2d()` — mean abundance in two groups (pupa vs the rest).
+`df2clust2d()` — mean abundance in two groups on a log10 scale (pupa vs larvae).
 
 <img src="img/cluster2d.png" alt="Two-group cluster scatter" width="720">
 

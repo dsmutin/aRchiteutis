@@ -1,0 +1,23 @@
+citHeader("To cite aRchiteutis in publications use:")
+
+bibentry(
+  bibtype = "Article",
+  title   = "Shotgun Metagenomics Reveals Minor Microbeeomes Diversity Defining Differences between Larvae and Pupae Brood Combs",
+  author  = c(
+    person("Daniil", "Smutin"),
+    person("Amir", "Taldaev"),
+    person("Egor", "Lebedev"),
+    person("Leonid", "Adonin")),
+  journal = "International Journal of Molecular Sciences",
+  year    = "2024",
+  volume  = "25",
+  number  = "2",
+  pages   = "741",
+  doi     = "10.3390/ijms25020741",
+  url     = "https://www.mdpi.com/1422-0067/25/2/741",
+  textVersion = paste(
+    "Smutin D, Taldaev A, Lebedev E, Adonin L (2024).",
+    "Shotgun Metagenomics Reveals Minor Microbeeomes Diversity Defining Differences between Larvae and Pupae Brood Combs.",
+    "International Journal of Molecular Sciences, 25(2):741.",
+    "doi:10.3390/ijms25020741")
+)

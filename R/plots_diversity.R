@@ -108,32 +108,47 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
 
     p <- ggplot2::ggplot(gg, ggplot2::aes(y = .data$value, x = .data$split))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = FALSE,
+      ggplot2::geom_violin(trim = TRUE, scale = "width",
                            ggplot2::aes(fill = .data$split), alpha = 0.3)
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0,
                             ggplot2::aes(fill = .data$split), alpha = 0.3)
     }
+    same_legend <- identical(sort(unique(as.character(gg$sample2))),
+                             sort(unique(as.character(gg$split))))
     p +
-      ggplot2::geom_jitter(ggplot2::aes(color = .data$sample2), width = 0.1) +
-      ggplot2::facet_wrap(~name, drop = TRUE, ncol = 4, scales = "free",
+      ggplot2::geom_jitter(ggplot2::aes(color = .data$sample2),
+                           width = 0.12, height = 0, size = 1.6,
+                           show.legend = !same_legend) +
+      ggplot2::facet_wrap(~name, drop = TRUE, ncol = 4, scales = "free_y",
                           strip.position = "top") +
       ggplot2::scale_color_discrete(
         NULL, type = viridis::viridis(length(unique(gg$sample2)))) +
       ggplot2::scale_fill_discrete(NULL) +
       ggplot2::ylab("") + ggplot2::xlab("") +
-      ggplot2::theme_minimal() +
-      ggplot2::theme(legend.position = "right",
-                     axis.text.x = ggplot2::element_blank())
+      ggplot2::theme_minimal(base_size = 11) +
+      ggplot2::theme(
+        legend.position = "bottom",
+        legend.text = ggplot2::element_text(size = 8),
+        legend.key.size = ggplot2::unit(0.35, "cm"),
+        legend.spacing.x = ggplot2::unit(0.4, "cm"),
+        strip.text = ggplot2::element_text(size = 8),
+        axis.text.x = ggplot2::element_text(size = 8),
+        plot.margin = ggplot2::margin(6, 8, 6, 6)) +
+      ggplot2::guides(
+        fill = "none",
+        color = if (same_legend) "none" else
+          ggplot2::guide_legend(nrow = 2, override.aes = list(size = 2)))
   } else {
     p <- ggplot2::ggplot(gg, ggplot2::aes(x = .data$value, y = .data$name))
     p <- p + if (violin) {
-      ggplot2::geom_violin(trim = FALSE)
+      ggplot2::geom_violin(trim = TRUE, scale = "width")
     } else {
       ggplot2::geom_boxplot(outlier.alpha = 0)
     }
     p +
-      ggplot2::geom_jitter(ggplot2::aes(color = .data$sample2), width = 0.1) +
+      ggplot2::geom_jitter(ggplot2::aes(color = .data$sample2),
+                           width = 0.12, height = 0, size = 1.6) +
       ggplot2::facet_wrap(~name, drop = TRUE, ncol = 4, scales = "free",
                           strip.position = "top") +
       ggplot2::scale_color_discrete(
@@ -160,7 +175,7 @@ df_beta_matrix <- function(df, dist_function) {
 #' Beta-diversity heatmap between samples
 #'
 #' Computes a pairwise beta-diversity distance matrix between samples and draws
-#' it as a symmetric [heatmap3::heatmap3] heatmap.
+#' it as a ggplot tile heatmap, samples ordered by hierarchical clustering.
 #'
 #' @param df A tidy `tibble` from [get_counts()].
 #' @param clade Character or `NULL`. Restrict to a single clade.
@@ -168,16 +183,16 @@ df_beta_matrix <- function(df, dist_function) {
 #'   (default [abdiv::bray_curtis]).
 #' @param treshhold_up,treshhold_down Upper / lower mean-abundance thresholds
 #'   used to filter taxa.
-#' @param add_legend Integer column index/indices (or `FALSE`) drawn as colour
-#'   side-bars.
-#' @param add_labels Integer column index/indices (or `FALSE`) used for row/col
-#'   labels.
+#' @param add_legend Integer column index/indices (or `FALSE`) drawn as a
+#'   coloured point next to each sample.
+#' @param add_labels Integer column index/indices (or `FALSE`) used as axis
+#'   labels instead of the sample name.
 #' @param print_df Logical. If `TRUE`, return the distance matrix instead of
 #'   drawing.
-#' @param ... Passed to [heatmap3::heatmap3].
+#' @param ... Unused; kept for backward compatibility.
 #'
-#' @return Invisibly, the result of [heatmap3::heatmap3] (a heatmap is drawn as
-#'   a side effect); or the distance matrix when `print_df = TRUE`.
+#' @return Invisibly, the ggplot object (a heatmap is drawn as a side effect);
+#'   or the distance matrix when `print_df = TRUE`.
 #'
 #' @examples
 #' path <- system.file("extdata", package = "aRchiteutis")
@@ -191,33 +206,27 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
                     add_legend = FALSE, add_labels = FALSE,
                     print_df = FALSE, ...) {
 
-  name2viridis <- function(name) {
-    name <- as.character(unlist(name))
-    n_un <- data.frame(name = unique(name),
-                       col = viridis::viridis(length(unique(name))))
-    name <- dplyr::left_join(data.frame(name = name), n_un, by = "name")
-    as.character(unlist(name[, 2]))
-  }
-
   pallete <- grDevices::colorRampPalette(
     c("white", "lightyellow", "orange", "orangered3", "darkred"))(254)
   pallete <- rev(pallete)
 
   if (!is.null(clade)) df <- df[df$clade %in% clade, ]
 
+  group_of <- NULL
   if (!isFALSE(add_legend)) {
-    leg <- unique(df[, c(3, add_legend)])
-    colsides <- apply(leg[, -1, drop = FALSE], 2, name2viridis)
-  } else {
-    colsides <- NULL
+    leg <- unique(df[, c(3, add_legend), drop = FALSE])
+    group_of <- stats::setNames(
+      apply(leg[, -1, drop = FALSE], 1, function(z) paste(z, collapse = ", ")),
+      as.character(leg[[1]]))
   }
 
   if (!isFALSE(add_labels)) {
-    leg2 <- unique(df[, c(3, add_labels)])
-    leg2 <- apply(leg2[, -1, drop = FALSE], 1,
-                  function(z) stringr::str_c(z, collapse = ", "))
+    leg2 <- unique(df[, c(3, add_labels), drop = FALSE])
+    lab_of <- stats::setNames(
+      apply(leg2[, -1, drop = FALSE], 1, function(z) paste(z, collapse = ", ")),
+      as.character(leg2[[1]]))
   } else {
-    leg2 <- as.character(unique(df$sample))
+    lab_of <- NULL
   }
 
   df_taxa <- dplyr::summarise(df, m = mean(amount_cl), .by = "taxa")
@@ -231,24 +240,55 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
   }
 
   draw <- function(df, ...) {
-    df2 <- df_beta_matrix(df, dist_function)
-    df2[1, 1] <- 1
+    mat <- df_beta_matrix(df, dist_function)
+    mat[1, 1] <- 1
+    ord <- stats::hclust(stats::as.dist(mat), method = "ward.D2")$order
+    mat <- mat[ord, ord, drop = FALSE]
+    long <- as.data.frame(as.table(mat), stringsAsFactors = FALSE)
+    names(long) <- c("row", "col", "dist")
+    samples <- rownames(mat)
+    row_lab <- if (is.null(lab_of)) samples else unname(lab_of[samples])
+    if (anyDuplicated(row_lab)) row_lab <- samples
+    x_levels <- row_lab
+    if (!is.null(group_of)) x_levels <- c(" ", row_lab)
+    long$row <- factor(row_lab[match(as.character(long$row), samples)],
+                       levels = rev(row_lab))
+    long$col <- factor(row_lab[match(as.character(long$col), samples)],
+                       levels = x_levels)
 
-    heatmap3::heatmap3(
-      df2, symm = TRUE,
-      col = c("white", pallete, "white"),
-      showRowDendro = FALSE,
-      labRow = as.expression(lapply(leg2, function(a) bquote(italic(.(a))))),
-      labCol = as.expression(lapply(leg2, function(a) bquote(italic(.(a))))),
-      method = "ward.D2",
-      cexCol = 1.5, cexRow = 1.5, ...)
+    p <- ggplot2::ggplot(long, ggplot2::aes(.data$col, .data$row, fill = .data$dist)) +
+      ggplot2::geom_tile() +
+      ggplot2::scale_fill_gradientn(colours = rev(pallete), name = "distance") +
+      ggplot2::coord_fixed() +
+      ggplot2::labs(x = NULL, y = NULL) +
+      ggplot2::theme_minimal(base_size = 11) +
+      ggplot2::theme(
+        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, vjust = 1, size = 8),
+        axis.text.y = ggplot2::element_text(size = 8),
+        panel.grid = ggplot2::element_blank(),
+        legend.key.height = ggplot2::unit(1.1, "cm"),
+        plot.margin = ggplot2::margin(12, 12, 12, 12))
+
+    if (!is.null(group_of)) {
+      ann <- data.frame(
+        x = factor(" ", levels = c(" ", row_lab)),
+        sample = factor(row_lab, levels = levels(long$row)),
+        grp = unname(group_of[samples]))
+      pal <- stats::setNames(viridis::viridis(length(unique(ann$grp))), unique(ann$grp))
+      p <- p +
+        ggplot2::geom_point(
+          data = ann,
+          ggplot2::aes(x = .data$x, y = .data$sample, colour = .data$grp),
+          inherit.aes = FALSE, size = 2.4) +
+        ggplot2::scale_color_manual(values = pal, name = NULL) +
+        ggplot2::scale_x_discrete(drop = FALSE)
+    }
+
+    print(p)
+    invisible(p)
   }
 
-  if (!is.null(colsides)) {
-    invisible(draw(df, ColSideColors = colsides))
-  } else {
-    invisible(draw(df))
-  }
+  invisible(draw(df))
 }
 
 #' Bray-Curtis beta-diversity heatmap
@@ -321,10 +361,13 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
   vectors$leg1 <- forcats::fct_inorder(factor(leg1))
 
   gg <- ggplot2::ggplot(vectors, ggplot2::aes(.data$Axis.1, .data$Axis.2)) +
-    ggplot2::geom_point(ggplot2::aes(color = .data$leg1)) +
+    ggplot2::geom_point(ggplot2::aes(color = .data$leg1), size = 2.4) +
     ggplot2::scale_color_discrete(
       NULL, type = viridis::viridis(length(unique(leg1)))) +
-    ggplot2::theme_minimal()
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.12)) +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = 0.12)) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(plot.margin = ggplot2::margin(8, 8, 8, 8))
 
   if (!is.null(leg2)) {
     vectors$leg2 <- leg2
@@ -332,8 +375,9 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
       ggnewscale::new_scale_colour() +
       ggforce::geom_mark_ellipse(
         data = vectors,
-        ggplot2::aes(color = .data$leg2, label = .data$leg2),
-        label.buffer = ggplot2::unit(-5, "mm"))
+        ggplot2::aes(color = .data$leg2, group = .data$leg2),
+        expand = ggplot2::unit(2, "mm"),
+        show.legend = FALSE)
   }
 
   gg

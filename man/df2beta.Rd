@@ -27,24 +27,24 @@ df2beta(
 \item{treshhold_up, treshhold_down}{Upper / lower mean-abundance thresholds
 used to filter taxa.}
 
-\item{add_legend}{Integer column index/indices (or \code{FALSE}) drawn as colour
-side-bars.}
+\item{add_legend}{Integer column index/indices (or \code{FALSE}) drawn as a
+coloured point next to each sample.}
 
-\item{add_labels}{Integer column index/indices (or \code{FALSE}) used for row/col
-labels.}
+\item{add_labels}{Integer column index/indices (or \code{FALSE}) used as axis
+labels instead of the sample name.}
 
 \item{print_df}{Logical. If \code{TRUE}, return the distance matrix instead of
 drawing.}
 
-\item{...}{Passed to \link[heatmap3:heatmap3]{heatmap3::heatmap3}.}
+\item{...}{Unused; kept for backward compatibility.}
 }
 \value{
-Invisibly, the result of \link[heatmap3:heatmap3]{heatmap3::heatmap3} (a heatmap is drawn as
-a side effect); or the distance matrix when \code{print_df = TRUE}.
+Invisibly, the ggplot object (a heatmap is drawn as a side effect);
+or the distance matrix when \code{print_df = TRUE}.
 }
 \description{
 Computes a pairwise beta-diversity distance matrix between samples and draws
-it as a symmetric \link[heatmap3:heatmap3]{heatmap3::heatmap3} heatmap.
+it as a ggplot tile heatmap, samples ordered by hierarchical clustering.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

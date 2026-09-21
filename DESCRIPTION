@@ -32,7 +32,6 @@ Imports:
     ggraph,
     ggrepel,
     grDevices,
-    heatmap3,
     igraph,
     magrittr,
     rlang,

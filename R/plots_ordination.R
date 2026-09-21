@@ -33,7 +33,7 @@ df2pca_sample <- function(df, scale = TRUE, detect = FALSE,
     color_list <- rep("sample", ncol(mat))
   }
 
-  factoextra::fviz_pca_ind(res_pca, col.ind = color_list, ...) +
+  factoextra::fviz_pca_ind(res_pca, col.ind = color_list, repel = TRUE, ...) +
     ggplot2::theme_minimal() +
     ggplot2::ggtitle("")
 }
@@ -59,7 +59,7 @@ df2pca_sp <- function(df, scale = TRUE, ...) {
 
   res_pca <- stats::prcomp(t(mat), scale. = scale)
 
-  factoextra::fviz_pca_var(res_pca, ...) +
+  factoextra::fviz_pca_var(res_pca, repel = TRUE, ...) +
     ggplot2::theme_minimal() +
     ggplot2::ggtitle("")
 }
@@ -83,7 +83,8 @@ df2pca_sp <- function(df, scale = TRUE, ...) {
 #'
 #' @export
 df2heatmap <- function(df, clade = FALSE, trim = FALSE, ...) {
-  invisible(stats::heatmap(t(df), col = rev(viridis::viridis(256)), ...))
+  invisible(stats::heatmap(t(df), col = rev(viridis::viridis(256)),
+                           margins = c(12, 8), ...))
 }
 
 #' Hierarchical clustering dendrogram
@@ -117,8 +118,26 @@ df2cluster <- function(df, k_means = 2, use = "sp") {
     clust_res <- stats::hclust(stats::dist(t(df)), method = "ward.D2")
   }
 
-  graphics::plot(clust_res)
-  if (k_means >= 2) stats::rect.hclust(clust_res, k = k_means, border = "red")
+  nlab <- length(clust_res$labels)
+  cex <- max(0.45, min(0.75, 18 / nlab))
+  dend <- stats::as.dendrogram(clust_res)
+  if (k_means >= 2 && k_means < nlab) {
+    groups <- stats::cutree(clust_res, k = k_means)
+    cols <- viridis::viridis(k_means)
+    dend <- stats::dendrapply(dend, function(node) {
+        if (stats::is.leaf(node)) {
+        lab <- attr(node, "label")
+        attr(node, "nodePar") <- list(
+          pch = NA, cex = 0, lab.cex = cex,
+          lab.col = cols[groups[[lab]]])
+      }
+      node
+    })
+  }
+  op <- graphics::par(mar = c(1, 2, 1, 10), no.readonly = TRUE)
+  on.exit(graphics::par(op), add = TRUE)
+  graphics::plot(dend, horiz = TRUE, axes = FALSE, main = "",
+                 xlab = "", ylab = "")
   invisible(NULL)
 }
 
@@ -183,11 +202,16 @@ df2clust2d <- function(df, legend_detect, clade = FALSE, k_means = 5,
   ggplot2::ggplot(res, ggplot2::aes(.data$x, .data$y)) +
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = 2,
                          color = "cadetblue") +
-    ggplot2::geom_point(ggplot2::aes(color = .data$cluster)) +
-    ggrepel::geom_label_repel(ggplot2::aes(label = .data$name)) +
+    ggplot2::geom_point(ggplot2::aes(color = .data$cluster), size = 2) +
+    ggrepel::geom_label_repel(
+      ggplot2::aes(label = .data$name),
+      size = 2.6, max.overlaps = 40, box.padding = 0.35,
+      point.padding = 0.3, min.segment.length = 0, seed = 1,
+      na.rm = TRUE) +
     ggplot2::scale_color_continuous("Cluster", type = "viridis") +
-    ggplot2::coord_fixed() +
-    ggplot2::theme_minimal()
+    ggplot2::coord_fixed(clip = "off") +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(plot.margin = ggplot2::margin(16, 16, 16, 16))
 }
 
 #' Correlation plot between taxa
@@ -212,9 +236,9 @@ df2corrplot <- function(df, k_means = FALSE, ...) {
   cmat[is.na(cmat)] <- 0
 
   corrplot::corrplot(cmat, is.corr = TRUE, hclust.method = "complete",
-                     tl.col = "black", order = "hclust",
+                     tl.col = "black", tl.cex = 0.7, order = "hclust",
                      addrect = if (isFALSE(k_means)) NULL else k_means,
-                     font = 3, ...)
+                     font = 3, mar = c(1, 1, 1, 1), ...)
   invisible(cmat)
 }
 
@@ -302,17 +326,19 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
       ggraph::geom_node_text(
-        ggplot2::aes(x = .data$x * 1.1, y = .data$y * 1.1, label = .data$name,
-                     angle = angle, hjust = hjust), fontface = "italic") +
+        ggplot2::aes(x = .data$x * 1.38, y = .data$y * 1.38, label = .data$name,
+                     angle = angle, hjust = hjust),
+        size = 2.6, fontface = "italic", check_overlap = TRUE) +
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_manual(values = viridis::viridis(k_means),
                                       na.value = "transparent",
                                       guide = "none") +
       ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), na.value = 0,
                                           guide = "none") +
-      ggplot2::coord_fixed() +
+      ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
-      ggplot2::expand_limits(x = c(-3, 3), y = c(-3, 3))
+      ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
+      ggplot2::expand_limits(x = c(-3.4, 3.4), y = c(-3.4, 3.4))
   } else {
     if (!isFALSE(coenf_level)) {
       if (coenf == "upper") {
@@ -331,17 +357,19 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
       ggraph::geom_node_text(
-        ggplot2::aes(x = .data$x * 1.1, y = .data$y * 1.1, label = .data$name,
-                     angle = angle, hjust = hjust), fontface = "italic") +
+        ggplot2::aes(x = .data$x * 1.38, y = .data$y * 1.38, label = .data$name,
+                     angle = angle, hjust = hjust),
+        size = 2.6, fontface = "italic", check_overlap = TRUE) +
       ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
       ggraph::scale_edge_color_gradient2(low = "red", mid = "white",
                                          high = "blue",
                                          na.value = "transparent",
                                          guide = "none") +
       ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), guide = "none") +
-      ggplot2::coord_fixed() +
+      ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
-      ggplot2::expand_limits(x = c(-3, 3), y = c(-3, 3))
+      ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
+      ggplot2::expand_limits(x = c(-3.4, 3.4), y = c(-3.4, 3.4))
   }
 }
 
@@ -403,11 +431,17 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
   ggplot2::ggplot(tsne_plot, ggplot2::aes(.data$x, .data$y)) +
     ggplot2::geom_point(ggplot2::aes(color = .data$clust), show.legend = TRUE,
                         alpha = 0.5) +
-    ggrepel::geom_label_repel(ggplot2::aes(label = .data$taxa), size = 5,
-                              max.overlaps = 100) +
+    ggrepel::geom_label_repel(ggplot2::aes(label = .data$taxa), size = 2.8,
+                              max.overlaps = 30, box.padding = 0.4,
+                              point.padding = 0.25, min.segment.length = 0,
+                              seed = 1, na.rm = TRUE) +
     ggplot2::xlab("") + ggplot2::ylab("") +
     ggplot2::scale_color_discrete("", type = viridis::viridis(lvir)) +
-    ggplot2::theme_minimal()
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.12)) +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = 0.12)) +
+    ggplot2::coord_cartesian(clip = "off") +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(plot.margin = ggplot2::margin(14, 14, 14, 14))
 }
 
 #' Volcano plot of abundance change between two sample groups
@@ -469,6 +503,8 @@ df2volcano <- function(df, legend_detect, treshhold_logAC = 0.5,
                      t_df, by = "taxa"))
   res[is.na(res)] <- 0
   res$logAC <- log10(res$y / res$x)
+  res$logAC[!is.finite(res$logAC)] <- NA_real_
+  res$p[!is.finite(res$p)] <- NA_real_
 
   res$taxa[(abs(res$logAC) < treshhold_logAC) |
              (res$p < -log10(treshhold_p))] <- NA
@@ -484,10 +520,16 @@ df2volcano <- function(df, legend_detect, treshhold_logAC = 0.5,
     ggplot2::geom_vline(xintercept = -treshhold_logAC, linetype = 3,
                         alpha = 0.5, color = "red") +
     ggrepel::geom_label_repel(ggplot2::aes(label = .data$taxa),
-                              max.overlaps = 30) +
+                              size = 2.8, max.overlaps = 25,
+                              box.padding = 0.4, min.segment.length = 0,
+                              seed = 1, na.rm = TRUE) +
     ggplot2::scale_color_gradient("logAC", high = "blue", low = "gray",
                                   na.value = "blue") +
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.08)) +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = 0.08)) +
+    ggplot2::coord_cartesian(clip = "off") +
     ggplot2::xlab("log10 amount change") +
     ggplot2::ylab("p-value by t.test") +
-    ggplot2::theme_minimal()
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(plot.margin = ggplot2::margin(14, 14, 14, 14))
 }

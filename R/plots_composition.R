@@ -14,8 +14,14 @@
 #' @export
 #' @importFrom rlang .data
 df2donut <- function(df, ...) {
+  df <- df_tidy_drop_unclassified(df)
+  totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
+  df <- dplyr::left_join(df, totals, by = "sample")
+  df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
 
-  df <- dplyr::summarise(df, m = mean(amount), .by = c("taxa", "clade"))
+  df <- dplyr::summarise(df, m = mean(.data$amount), .by = c("taxa", "clade"))
+  total <- sum(df$m)
+  df$m <- if (is.finite(total) && total > 0) df$m / total else 0
   df <- df[order(df$m), ]
   df$ymax <- cumsum(df$m)
   df$ymin <- c(0, utils::head(df$ymax, n = -1))
@@ -28,7 +34,14 @@ df2donut <- function(df, ...) {
     ggplot2::coord_polar(theta = "y") +
     ggplot2::xlim(c(2, 4)) +
     ggplot2::scale_fill_discrete("", type = viridis::viridis(lvir)) +
-    ggplot2::theme_void()
+    ggplot2::theme_void() +
+    ggplot2::theme(
+      legend.position = "bottom",
+      legend.text = ggplot2::element_text(size = 8),
+      legend.key.size = ggplot2::unit(0.35, "cm"),
+      legend.box.margin = ggplot2::margin(6, 0, 0, 0),
+      plot.margin = ggplot2::margin(8, 8, 8, 8)) +
+    ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2))
 }
 
 #' Stacked bar plot of composition per sample
@@ -45,6 +58,11 @@ df2donut <- function(df, ...) {
 #' @export
 #' @importFrom rlang .data
 df2composition <- function(df) {
+  df <- df_tidy_drop_unclassified(df)
+  totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
+  df <- dplyr::left_join(df, totals, by = "sample")
+  df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
+  df$.total <- NULL
 
   lvir <- length(levels(factor(df$taxa)))
 
@@ -52,7 +70,16 @@ df2composition <- function(df) {
                                    fill = forcats::fct_inorder(.data$taxa))) +
     ggplot2::geom_col(position = "stack") +
     ggplot2::scale_fill_discrete("Taxa", type = rev(viridis::viridis(lvir))) +
-    ggplot2::theme_minimal()
+    ggplot2::scale_x_continuous(limits = c(0, 1),
+                                expand = ggplot2::expansion(mult = c(0, 0.02))) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      legend.position = "bottom",
+      legend.text = ggplot2::element_text(size = 8),
+      legend.key.size = ggplot2::unit(0.35, "cm"),
+      axis.text.y = ggplot2::element_text(size = 8),
+      plot.margin = ggplot2::margin(8, 16, 8, 8)) +
+    ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2))
 }
 
 #' Box plot of per-sample composition across taxa
@@ -81,11 +108,19 @@ df2barplot <- function(df, ...) {
   df <- rbind(df[taxa, ], df[!taxa, ])
   df$taxa <- forcats::fct_inorder(df$taxa)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount, y = .data$taxa,
+  pos <- df$amount[df$amount > 0]
+  floor_val <- if (length(pos)) min(pos) else 0
+  df$amount_log <- log10(df$amount + floor_val)
+
+  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
                                    fill = .data$taxa)) +
     ggplot2::geom_boxplot(show.legend = FALSE) +
-    ggplot2::theme_minimal() +
-    ggplot2::xlab("") + ggplot2::ylab("") +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::xlab(expression(log[10](x + min(x[x > 0])))) +
+    ggplot2::ylab("") +
     ggplot2::scale_fill_discrete("", type = viridis::viridis(lvir)) +
-    ggplot2::theme(text = ggplot2::element_text(size = 20))
+    ggplot2::guides(fill = "none") +
+    ggplot2::theme(
+      axis.text.y = ggplot2::element_text(size = 8, face = "italic"),
+      plot.margin = ggplot2::margin(8, 12, 8, 8))
 }

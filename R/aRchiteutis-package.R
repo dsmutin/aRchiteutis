@@ -27,7 +27,7 @@ utils::globalVariables(c(
   "sum(N)", "mean(amount)", "mean(amount_cl)",
   # reshaped / plotting columns
   "value", "name", "x", "y", "ymax", "ymin", "split", "sample2",
-  "logAC", "p", "sd", "Axis.1", "Axis.2", "group", "cluster",
+  "logAC", "p", "sd", "Axis.1", "Axis.2", "group", "cluster", "amount_log",
   # ggraph node/edge computed aesthetics
   "vals"
 ))

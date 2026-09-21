@@ -23,13 +23,13 @@ df2beta_pcoa(
 \item{treshhold_up, treshhold_down}{Upper / lower mean-abundance thresholds
 used to filter taxa.}
 
-\item{add_legend}{Integer column index/indices (or \code{FALSE}) drawn as colour
-side-bars.}
+\item{add_legend}{Integer column index/indices (or \code{FALSE}) drawn as a
+coloured point next to each sample.}
 
 \item{add_ellipse}{Integer column index/indices (or \code{FALSE}) used to draw
 grouping ellipses.}
 
-\item{...}{Passed to \link[heatmap3:heatmap3]{heatmap3::heatmap3}.}
+\item{...}{Unused; kept for backward compatibility.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.

@@ -329,8 +329,8 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
   hjust <- ifelse(angle < -90, 1, 0)
   angle <- ifelse(angle < -90, angle + 180, angle)
   lab_size <- max(1.55, min(2.6, 48 / ldfr))
-  lab_r <- if (ldfr > 20) 1.18 else 1.12
-  lab_pad <- if (ldfr > 20) 2.8 else 2.4
+  lab_r <- if (ldfr > 20) 1.16 else 1.1
+  lab_pad <- if (ldfr > 20) 1.85 else 1.7
 
   vals <- unlist(vertices[-h_remove, 2])
 

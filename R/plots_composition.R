@@ -14,6 +14,7 @@
 #' @export
 #' @importFrom rlang .data
 df2donut <- function(df, ...) {
+  df <- df_tidy_drop_unclassified(df)
 
   df <- dplyr::summarise(df, m = mean(amount), .by = c("taxa", "clade"))
   df <- df[order(df$m), ]
@@ -52,6 +53,7 @@ df2donut <- function(df, ...) {
 #' @export
 #' @importFrom rlang .data
 df2composition <- function(df) {
+  df <- df_tidy_drop_unclassified(df)
 
   lvir <- length(levels(factor(df$taxa)))
 
@@ -96,14 +98,19 @@ df2barplot <- function(df, ...) {
   df <- rbind(df[taxa, ], df[!taxa, ])
   df$taxa <- forcats::fct_inorder(df$taxa)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount, y = .data$taxa,
+  pos <- df$amount[df$amount > 0]
+  floor_val <- if (length(pos)) min(pos) else 0
+  df$amount_log <- log10(df$amount + floor_val)
+
+  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
                                    fill = .data$taxa)) +
     ggplot2::geom_boxplot(show.legend = FALSE) +
     ggplot2::theme_minimal(base_size = 11) +
-    ggplot2::xlab("") + ggplot2::ylab("") +
+    ggplot2::xlab(expression(log[10](x + min(x[x > 0])))) +
+    ggplot2::ylab("") +
     ggplot2::scale_fill_discrete("", type = viridis::viridis(lvir)) +
     ggplot2::guides(fill = "none") +
     ggplot2::theme(
-      axis.text.y = ggplot2::element_text(size = 8),
+      axis.text.y = ggplot2::element_text(size = 8, face = "italic"),
       plot.margin = ggplot2::margin(8, 12, 8, 8))
 }

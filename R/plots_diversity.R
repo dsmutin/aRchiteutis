@@ -113,7 +113,8 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
                              ggplot2::aes(fill = .data$split), alpha = 0.35,
                              colour = "grey35"),
         ggplot2::geom_boxplot(width = 0.14, outlier.shape = NA,
-                              fill = "white", colour = "grey20",
+                              ggplot2::aes(fill = .data$split),
+                              alpha = 0.95, colour = "grey20",
                               show.legend = FALSE)
       )
     } else {
@@ -152,7 +153,7 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
         ggplot2::geom_violin(trim = TRUE, scale = "width",
                              fill = "grey80", colour = "grey35", alpha = 0.6),
         ggplot2::geom_boxplot(width = 0.14, outlier.shape = NA,
-                              fill = "white", colour = "grey20",
+                              fill = "grey80", colour = "grey20",
                               show.legend = FALSE)
       )
     } else {
@@ -218,9 +219,7 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
                     add_legend = FALSE, add_labels = FALSE,
                     print_df = FALSE, ...) {
 
-  pallete <- grDevices::colorRampPalette(
-    c("white", "lightyellow", "orange", "orangered3", "darkred"))(254)
-  pallete <- rev(pallete)
+  pallete <- viridis::viridis(256)
 
   if (!is.null(clade)) df <- df[df$clade %in% clade, ]
 
@@ -270,7 +269,7 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
 
     p <- ggplot2::ggplot(long, ggplot2::aes(.data$col, .data$row, fill = .data$dist)) +
       ggplot2::geom_tile() +
-      ggplot2::scale_fill_gradientn(colours = rev(pallete), name = "distance") +
+      ggplot2::scale_fill_gradientn(colours = pallete, name = "distance") +
       ggplot2::coord_fixed() +
       ggplot2::labs(x = NULL, y = NULL) +
       ggplot2::theme_minimal(base_size = 11) +

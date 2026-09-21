@@ -328,9 +328,9 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
   angle <- 90 - 360 * 0:(ldfr - 1) / ldfr
   hjust <- ifelse(angle < -90, 1, 0)
   angle <- ifelse(angle < -90, angle + 180, angle)
-  lab_size <- max(1.55, min(2.6, 48 / ldfr))
-  lab_r <- if (ldfr > 20) 1.16 else 1.1
-  lab_pad <- if (ldfr > 20) 1.85 else 1.7
+  lab_size <- max(6.4, min(8.4, 240 / ldfr))
+  lab_r <- if (ldfr > 20) 1.28 else 1.16
+  lab_pad <- if (ldfr > 20) 3.05 else 2.15
 
   vals <- unlist(vertices[-h_remove, 2])
 
@@ -354,8 +354,7 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
     ggraph::ggraph(gg, layout = "linear", circular = TRUE) +
       ggraph::geom_edge_arc(
         ggplot2::aes(alpha = (vals)^4,
-                     color = as.character(df_clust$group)),
-        show.legend = FALSE) +
+                     color = as.character(df_clust$group))) +
       ggraph::geom_node_point(
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
@@ -364,15 +363,33 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
                      angle = angle, hjust = hjust),
         size = lab_size, fontface = "italic",
         check_overlap = ldfr > 36) +
-      ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
-      ggraph::scale_edge_color_manual(values = viridis::viridis(k_means),
-                                      na.value = "transparent",
-                                      guide = "none") +
+      ggplot2::scale_color_manual(values = viridis::viridis(k_means), guide = "none") +
+      ggraph::scale_edge_color_manual(
+        values = viridis::viridis(k_means),
+        na.value = "transparent",
+        guide = "none") +
       ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), na.value = 0,
                                           guide = "none") +
+      ggnewscale::new_scale_colour() +
+      ggplot2::geom_point(
+        data = data.frame(cluster = factor(seq_len(k_means))),
+        ggplot2::aes(x = 0, y = 0, colour = .data$cluster),
+        inherit.aes = FALSE, alpha = 0, size = 0) +
+      ggplot2::scale_colour_manual(
+        values = stats::setNames(viridis::viridis(k_means), seq_len(k_means)),
+        name = "cluster",
+        guide = ggplot2::guide_legend(
+          nrow = 1, title.position = "top", title.hjust = 0.5,
+          override.aes = list(alpha = 1, size = 5))) +
       ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
-      ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
+      ggplot2::theme(
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.title = ggplot2::element_text(size = 12),
+        legend.text = ggplot2::element_text(size = 11),
+        legend.margin = ggplot2::margin(8, 0, 4, 0),
+        plot.margin = ggplot2::margin(16, 20, 22, 20)) +
       ggplot2::expand_limits(x = c(-lab_pad, lab_pad), y = c(-lab_pad, lab_pad))
   } else {
     if (!isFALSE(coenf_level)) {
@@ -387,7 +404,7 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
 
     ggraph::ggraph(gg, layout = "linear", circular = TRUE) +
       ggraph::geom_edge_arc(
-        ggplot2::aes(alpha = (vals)^2, color = vals), show.legend = FALSE) +
+        ggplot2::aes(alpha = (vals)^2, color = vals)) +
       ggraph::geom_node_point(
         ggplot2::aes(x = .data$x * 1.05, y = .data$y * 1.05,
                      color = as.character(groups)), show.legend = FALSE) +
@@ -396,15 +413,33 @@ df2chord <- function(df, clade = FALSE, k_means = 5, amount_from = "amount",
                      angle = angle, hjust = hjust),
         size = lab_size, fontface = "italic",
         check_overlap = ldfr > 36) +
-      ggplot2::scale_color_manual(values = viridis::viridis(k_means)) +
-      ggraph::scale_edge_color_gradient2(low = "red", mid = "white",
-                                         high = "blue",
-                                         na.value = "transparent",
-                                         guide = "none") +
+      ggplot2::scale_color_manual(values = viridis::viridis(k_means), guide = "none") +
+      ggraph::scale_edge_color_gradient2(
+        low = "red", mid = "white", high = "blue",
+        na.value = "transparent",
+        guide = "none") +
       ggraph::scale_edge_alpha_continuous(range = c(0, 0.5), guide = "none") +
+      ggnewscale::new_scale_colour() +
+      ggplot2::geom_point(
+        data = data.frame(corr = range(vals, na.rm = TRUE)),
+        ggplot2::aes(x = 0, y = 0, colour = .data$corr),
+        inherit.aes = FALSE, alpha = 0, size = 0) +
+      ggplot2::scale_colour_gradient2(
+        low = "red", mid = "white", high = "blue", midpoint = 0,
+        name = "correlation",
+        guide = ggplot2::guide_colourbar(
+          title.position = "top", title.hjust = 0.5,
+          barwidth = ggplot2::unit(14, "cm"),
+          barheight = ggplot2::unit(1.5, "cm"))) +
       ggplot2::coord_fixed(clip = "off") +
       ggplot2::theme_void() +
-      ggplot2::theme(plot.margin = ggplot2::margin(18, 18, 18, 18)) +
+      ggplot2::theme(
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.title = ggplot2::element_text(size = 14),
+        legend.text = ggplot2::element_text(size = 12),
+        legend.margin = ggplot2::margin(14, 0, 8, 0),
+        plot.margin = ggplot2::margin(18, 24, 28, 24)) +
       ggplot2::expand_limits(x = c(-lab_pad, lab_pad), y = c(-lab_pad, lab_pad))
   }
 }

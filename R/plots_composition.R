@@ -15,8 +15,13 @@
 #' @importFrom rlang .data
 df2donut <- function(df, ...) {
   df <- df_tidy_drop_unclassified(df)
+  totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
+  df <- dplyr::left_join(df, totals, by = "sample")
+  df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
 
-  df <- dplyr::summarise(df, m = mean(amount), .by = c("taxa", "clade"))
+  df <- dplyr::summarise(df, m = mean(.data$amount), .by = c("taxa", "clade"))
+  total <- sum(df$m)
+  df$m <- if (is.finite(total) && total > 0) df$m / total else 0
   df <- df[order(df$m), ]
   df$ymax <- cumsum(df$m)
   df$ymin <- c(0, utils::head(df$ymax, n = -1))
@@ -54,6 +59,10 @@ df2donut <- function(df, ...) {
 #' @importFrom rlang .data
 df2composition <- function(df) {
   df <- df_tidy_drop_unclassified(df)
+  totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
+  df <- dplyr::left_join(df, totals, by = "sample")
+  df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
+  df$.total <- NULL
 
   lvir <- length(levels(factor(df$taxa)))
 
@@ -61,7 +70,8 @@ df2composition <- function(df) {
                                    fill = forcats::fct_inorder(.data$taxa))) +
     ggplot2::geom_col(position = "stack") +
     ggplot2::scale_fill_discrete("Taxa", type = rev(viridis::viridis(lvir))) +
-    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.02))) +
+    ggplot2::scale_x_continuous(limits = c(0, 1),
+                                expand = ggplot2::expansion(mult = c(0, 0.02))) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(
       legend.position = "bottom",

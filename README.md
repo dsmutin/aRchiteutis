@@ -1,23 +1,68 @@
-# aRchiteutis <a href=""><img src="img/logo.png" align="right" width="300"></a> 
-### tool for visualize &amp; work with Kraken2 reports
+# aRchiteutis <a href="https://github.com/dsmutin/aRchiteutis"><img src="img/logo.png" align="right" width="300"></a>
+
+### Visualise and work with Kraken2 metagenomics reports
+
+[![R-CMD-check](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml)
+[![R-package](https://img.shields.io/badge/R-package-276DC3?logo=r&logoColor=white)](https://github.com/dsmutin/aRchiteutis)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+`aRchiteutis` (formerly *samovar*) is an installable R package for parsing,
+transforming and plotting taxonomic composition tables from Kraken2, Kaiju
+and Bracken. Gallery of every plot: [vignettes.md](vignettes.md).
 
 ## Installation
 
-To get the tool clone the git repository:
-```bash
-git clone https://github.com/dsmutin/samovar.git
+Install the development version from GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("dsmutin/aRchiteutis")
 ```
 
-In your R session, source all functions:
-```R
-source(PATH/TO/SAMOVAR/scripts/source.R)
+Then attach it like any other package:
+
+```r
+library(aRchiteutis)
+```
+
+CI runs `R CMD check` on every push and pull request via the
+[R-CMD-check](https://github.com/dsmutin/aRchiteutis/actions/workflows/R-CMD-check.yaml)
+GitHub Action (`r-lib/actions`).
+
+A small set of example Kraken2 reports ships with the package under
+`inst/extdata/` so the examples and tests run out of the box:
+
+```r
+path   <- system.file("extdata", package = "aRchiteutis")
+legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+df <- get_counts(path = path, pattern = "decont_b", legend = legend,
+                 trim_char = "_")
+```
+
+Already have a taxa-by-sample table (or one loaded in Python / phyloseq)?
+Skip Kraken parsing and go straight to the plots:
+
+```r
+df <- from_abundance(count_matrix, clade = "G")     # taxa x samples
+df <- from_phyloseq(physeq, taxa_rank = "Genus")    # phyloseq object or list
+df <- python2r("abundance.csv", clade = "G")        # CSV dumped from Python
+# python3 inst/python/python2r.py my_table.csv abundance.csv
+df2composition(df)
 ```
 
 ## Structure
 
-Functions for data preparation and their descriptions are avialable in /functions
-Manipulations to visualize data is avialable in /plots
-Test pipeline via /test repositorium
+- `R/` — package source. Data-preparation helpers live in
+  `R/get_counts.R`, `R/df_transforms.R` and `R/from_table.R` (`from_abundance`,
+  `from_phyloseq`, `python2r`); the plotting functions are grouped
+  into `R/plots_composition.R`, `R/plots_diversity.R` and
+  `R/plots_ordination.R`.
+- `inst/python/python2r.py` — export a pandas / numpy table for `python2r()`.
+- `tests/testthat/` — a `testthat` (3rd edition) suite with at least one test
+  for every visualisation function.
+- `.github/workflows/R-CMD-check.yaml` — package check on GitHub Actions.
+- `.cursor/skills/` — agent skills for each pipeline step plus the full `aRchiteutis` path.
+- `pipeline.R` / `test/pipeline.R` — end-to-end usage walkthroughs.
 
 Enjoy beauty of R plots!
 
@@ -26,7 +71,7 @@ Enjoy beauty of R plots!
 
 ## Data manipulation
 #### get_counts
-get conut and amount table from kraken2 report
+get count and amount table from kraken2 report
 
 ```
       path, #path to k2 reports
@@ -134,7 +179,7 @@ bar plot of the composition
 
 #### df2barplot
 box plot of the composition
-<img src = "img/barpot.png">
+<img src = "img/barplot.png">
 
 #### df2cluster
 cluster plot. untidy table input

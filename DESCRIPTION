@@ -1,0 +1,55 @@
+Package: aRchiteutis
+Title: Visualise and Work with Kraken2 Metagenomics Reports
+Version: 0.1.0
+Authors@R: c(
+    person("Daniil", "Smutin", email = "dvsmutin@gmail.com", role = c("aut", "cre")),
+    person("Amir", "Taldaev", role = "aut"),
+    person("Egor", "Lebedev", role = "aut"),
+    person("Leonid", "Adonin", role = "aut"))
+Description: A toolkit (formerly a loose collection of scripts, also known as
+    'samovar') for parsing, transforming and visualising taxonomic composition
+    tables produced by Kraken2 (and Kaiju / Bracken) metagenomics classifiers.
+    It provides helpers to read classifier reports into tidy data frames,
+    reshape and trim taxa, and a family of 'df2*' plotting functions covering
+    composition (donut, stacked bar, box), alpha and beta diversity, ordination
+    (PCA, PCoA, t-SNE), clustering, heatmaps, correlation, chord and volcano
+    plots.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1.0)
+Imports:
+    abdiv,
+    ape,
+    corrplot,
+    dplyr,
+    factoextra,
+    forcats,
+    ggforce,
+    ggnewscale,
+    ggplot2,
+    ggraph,
+    ggrepel,
+    grDevices,
+    heatmap3,
+    igraph,
+    magrittr,
+    rlang,
+    stats,
+    stringr,
+    tibble,
+    tidyr,
+    tsne,
+    usedist,
+    utils,
+    viridis
+Suggests:
+    phyloseq,
+    reticulate,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+URL: https://github.com/dsmutin/aRchiteutis
+BugReports: https://github.com/dsmutin/aRchiteutis/issues
+Config/roxygen2/version: 8.1.0

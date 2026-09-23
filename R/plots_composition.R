@@ -44,9 +44,49 @@ df2donut <- function(df, ...) {
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2))
 }
 
+#' Order composition-bar samples
+#'
+#' `"fpc"` sorts by the first principal component of the sample-by-taxon
+#' matrix (the same score order the harness uses for adjacency matrices).
+#' `"hclust"` follows average-linkage Bray-Curtis. `"abundance"` and
+#' `"alpha"` sort by total amount and Shannon. `"none"` keeps input order.
+#'
+#' @keywords internal
+archi_order_sample_levels <- function(df, method = "fpc") {
+  method <- match.arg(method, c("fpc", "hclust", "abundance", "alpha", "none"))
+  samples <- unique(as.character(df$sample))
+  if (length(samples) < 2L || identical(method, "none")) return(samples)
+  mat <- df_untidy(df, amount_from = "amount")
+  mat <- mat[, intersect(samples, colnames(mat)), drop = FALSE]
+  if (ncol(mat) < 2L) return(samples)
+  ord <- if (identical(method, "fpc")) {
+    X <- t(mat)
+    X <- X[, colSums(X) > 0, drop = FALSE]
+    if (ncol(X) < 2L) {
+      colnames(mat)
+    } else {
+      pc <- stats::prcomp(X, center = TRUE, scale. = FALSE)
+      rownames(pc$x)[order(pc$x[, 1])]
+    }
+  } else if (identical(method, "hclust")) {
+    d <- usedist::dist_make(as.data.frame(t(mat)), abdiv::bray_curtis)
+    colnames(mat)[stats::hclust(d, method = "average")$order]
+  } else if (identical(method, "abundance")) {
+    names(sort(colSums(mat), decreasing = TRUE))
+  } else {
+    names(sort(apply(mat, 2, abdiv::shannon), decreasing = TRUE))
+  }
+  c(ord, setdiff(samples, ord))
+}
+
 #' Stacked bar plot of composition per sample
 #'
+#' Samples are ordered by the first principal component of the composition
+#' matrix (`order_samples = "fpc"`). Other orders: `"hclust"`, `"abundance"`,
+#' `"alpha"`, `"none"`.
+#'
 #' @param df A tidy `tibble` from [get_counts()].
+#' @param order_samples Sample order. See Details.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -57,12 +97,14 @@ df2donut <- function(df, ...) {
 #'
 #' @export
 #' @importFrom rlang .data
-df2composition <- function(df) {
+df2composition <- function(df, order_samples = c("fpc", "hclust", "abundance", "alpha", "none")) {
+  order_samples <- match.arg(order_samples)
   df <- df_tidy_drop_unclassified(df)
   totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
   df <- dplyr::left_join(df, totals, by = "sample")
   df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
   df$.total <- NULL
+  df$sample <- factor(df$sample, levels = archi_order_sample_levels(df, order_samples))
 
   lvir <- length(levels(factor(df$taxa)))
 

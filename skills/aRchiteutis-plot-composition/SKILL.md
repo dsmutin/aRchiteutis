@@ -12,7 +12,8 @@ dfT <- df_taxa_trim(df[df$clade != "S", ], top_taxa = 15)
 dfC <- df_get_top_taxa(df, clade = "G", top = 50)
 
 df2donut(dfT)          # mean composition donut
-df2composition(dfT)    # stacked bars per sample
+df2composition(dfT)                     # samples ordered by FPC (PC1)
+df2composition(dfT, order_samples = "hclust")  # or abundance, alpha, none
 df2barplot(dfC)        # box plot per taxon
 df2barplot(dfC, style = "raincloud")  # needs ggviolinbox
 ```

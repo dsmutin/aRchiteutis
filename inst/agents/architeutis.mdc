@@ -1,0 +1,29 @@
+---
+description: aRchiteutis agent rules. Use the package functions for metagenomic import, taxonomy trees and plots. Skills do not add hooks or private scripts.
+alwaysApply: true
+---
+
+# aRchiteutis agents
+
+Work through the installed package. Do not source harness scripts, shell hooks, or copies of skill code.
+
+- Import with `kraken_to_phyloseq()`, `kaiju_to_phyloseq()`, `qza_to_phyloseq()` or `abundance_taxid_to_phyloseq()`.
+- Taxonomy trees with `taxids_to_tree()` / `ranks_to_tree()`. Pass stored NCBI XML when a network fetch is not required.
+- Plots with the `df2*` functions (`df2composition`, `df2rarefaction`, `df2difftree`, `df2heattree`, `df2alpha`, `df2beta`, and the rest of the family). A preliminary MultiQC draft is `archi_report()`.
+- Skills only name those functions. They do not grow a second implementation.
+
+## Integrity
+
+Do not invent counts, p-values, citations or sample metadata. If a column or file is missing, stop and say which one. A group with n = 1 is descriptive only: no PERMANOVA, Kruskal–Wallis, Wilcoxon or ANCOM-BC.
+
+State the distance, rank and sample order in the caption (`order_samples`, `method` of `df2beta` / `archi_distance_matrix()`). Bray–Curtis is the default beta distance; Aitchison and the other `archi_beta_methods()` are explicit choices.
+
+## Inputs
+
+A legend is a QIIME 2 manifest: `sample-id` (or `sample_id`, `SampleID`, `sample`, or the first column) plus `target` when a report or a grouped plot needs it. Fail before plotting when sample ids do not overlap the count table.
+
+## Figures and the preliminary report
+
+Prefer the package geoms and palettes (viridis, raincloud via `style = "raincloud"`). Write PDF when the caller asks for a manuscript figure. Raster panels inside a MultiQC bundle are PNG.
+
+`archi_report()` output is a draft. End it with the sentence that this is a preliminary report only, not a final analysis. Do not drop that sentence when swapping plots or beta methods.

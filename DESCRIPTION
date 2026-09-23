@@ -44,6 +44,7 @@ Imports:
     utils,
     viridis
 Suggests:
+    biomformat,
     ggtree,
     ggtreeExtra,
     ggviolinbox,

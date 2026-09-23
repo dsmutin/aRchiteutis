@@ -14,6 +14,7 @@ dfC <- df_get_top_taxa(df, clade = "G", top = 50)
 df2donut(dfT)          # mean composition donut
 df2composition(dfT)    # stacked bars per sample
 df2barplot(dfC)        # box plot per taxon
+df2barplot(dfC, style = "raincloud")  # needs ggviolinbox
 ```
 
 Images: `vignettes.md` (donut, composition, barplot). All three return ggplot objects.

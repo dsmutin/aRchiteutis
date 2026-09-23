@@ -9,6 +9,7 @@ df2alpha(
   split_by = FALSE,
   add_legend = FALSE,
   alpha_function_list = list(Shannon = abdiv::shannon, Simpson = abdiv::simpson),
+  style = c("box", "violin", "raincloud"),
   ...
 )
 }
@@ -24,6 +25,8 @@ combined into the colour legend.}
 
 \item{alpha_function_list}{Named list of diversity functions (defaults to
 Shannon and Simpson from \pkg{abdiv}).}
+
+\item{style}{One of \code{"box"} (default), \code{"violin"}, or \code{"raincloud"}.}
 
 \item{...}{Passed to the geoms.}
 }

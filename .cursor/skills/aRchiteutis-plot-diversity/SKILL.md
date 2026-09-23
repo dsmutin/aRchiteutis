@@ -12,7 +12,8 @@ sp <- df[df$clade == "S", ]
 g  <- df[df$clade == "G", ]
 
 df2alpha_summary(sp, split_by = 7, add_legend = 7:8)
-df2alpha(sp, add_legend = 7)
+df2alpha_summary(sp, split_by = 7, style = "raincloud")  # needs ggviolinbox
+df2alpha(sp, add_legend = 7, style = "raincloud")
 
 df2beta(g, add_legend = 7:8, add_labels = 7)          # heatmap (side effect)
 df2beta_bray(g, print_df = TRUE)                      # Bray-Curtis matrix

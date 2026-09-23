@@ -4,12 +4,15 @@
 \alias{df2barplot}
 \title{Box plot of per-sample composition across taxa}
 \usage{
-df2barplot(df, ...)
+df2barplot(df, ..., style = c("box", "raincloud"))
 }
 \arguments{
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}.}
 
 \item{...}{Reserved for future use.}
+
+\item{style}{\code{"box"} or \code{"raincloud"} (half-violin and half-box via
+\pkg{ggviolinbox}, same fill as the box).}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -21,5 +24,9 @@ Box plot of per-sample composition across taxa
 path <- system.file("extdata", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6))
+if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+  df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6),
+             style = "raincloud")
+}
 
 }

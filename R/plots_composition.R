@@ -85,6 +85,8 @@ df2composition <- function(df) {
 #' Box plot of per-sample composition across taxa
 #'
 #' @param df A tidy `tibble` from [get_counts()].
+#' @param style `"box"` or `"raincloud"` (half-violin and half-box via
+#'   \pkg{ggviolinbox}, same fill as the box).
 #' @param ... Reserved for future use.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -93,10 +95,15 @@ df2composition <- function(df) {
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 #' df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6))
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6),
+#'              style = "raincloud")
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
-df2barplot <- function(df, ...) {
+df2barplot <- function(df, ..., style = c("box", "raincloud")) {
+  style <- match.arg(style)
   lvir <- length(levels(droplevels(factor(df$taxa))))
 
   df_sum <- dplyr::summarise(df, m = mean(amount), .by = "taxa")
@@ -112,9 +119,16 @@ df2barplot <- function(df, ...) {
   floor_val <- if (length(pos)) min(pos) else 0
   df$amount_log <- log10(df$amount + floor_val)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
-                                   fill = .data$taxa)) +
-    ggplot2::geom_boxplot(show.legend = FALSE) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
+                                       fill = .data$taxa))
+  if (identical(style, "raincloud")) {
+    p <- p + archi_rain_layers(
+      ggplot2::aes(fill = .data$taxa), orientation = "y"
+    )
+  } else {
+    p <- p + ggplot2::geom_boxplot(show.legend = FALSE)
+  }
+  p +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::xlab(expression(log[10](x + min(x[x > 0])))) +
     ggplot2::ylab("") +

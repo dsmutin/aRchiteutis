@@ -1,3 +1,14 @@
+test_that("raincloud style builds alpha and composition boxplots", {
+  skip_if_not_installed("ggviolinbox")
+  sp <- archi_df()
+  sp <- sp[sp$clade == "S", ]
+  expect_builds(df2alpha_summary(sp, split_by = 7, style = "raincloud"))
+  expect_builds(df2alpha(sp, style = "raincloud"))
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_builds(df2barplot(g, style = "raincloud"))
+})
+
 test_that("df2alpha_summary returns a buildable ggplot", {
   df <- archi_df()
   sp <- df[df$clade == "S", ]

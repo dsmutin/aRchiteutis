@@ -34,12 +34,17 @@ export(df_smart_bind)
 export(df_taxa_trim)
 export(df_tidy_drop_unclassified)
 export(df_untidy)
+export(fill_na_last_classified)
 export(from_abundance)
 export(from_phyloseq)
 export(get_counts)
 export(get_kraken_taxonomy)
+export(parse_ncbi_taxonomy_xml)
 export(python2r)
 export(python2r_script)
+export(ranks_to_tree)
+export(taxids_to_lineage)
+export(taxids_to_tree)
 importFrom(abdiv,
   berger_parker_d,
   bray_curtis,

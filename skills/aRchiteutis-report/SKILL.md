@@ -1,0 +1,32 @@
+---
+name: aRchiteutis-report
+description: Build a preliminary aRchiteutis MultiQC report with archi_report. Use when taxonomic profiles and a QIIME 2 legend should become a phyloseq object, a dropped-sample table, and captioned df2* figures.
+---
+
+# Preliminary report
+
+No hook. `archi_report()` imports profiles, attaches a taxonomy tree, drops samples that fail the read-count floor or the rarefaction-curve check, and writes MultiQC custom content plus `architeutis_report.html`.
+
+```r
+library(aRchiteutis)
+path <- system.file("extdata", package = "aRchiteutis")
+legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+out <- tempfile("archi-report")
+
+archi_report(
+  path, legend, outdir = out,
+  pattern = "m1[124]_", trim_char = "_", target = "stage",
+  plots = c("composition", "alpha", "beta", "rarefaction", "heattree"),
+  beta_method = "bray",          # or "jaccard", "aitchison", ...
+  order_samples = "fpc",
+  style = "box",                 # or "raincloud"
+  rarefaction_depths = c(1000L, 5000L),
+  rarefaction_reps = 1L
+)
+```
+
+`source` is `"auto"`, `"kraken"`, `"kaiju"`, `"qza"` or `"abundance"`. For a taxid table pass `source = "abundance"`, `counts`, and `xml`.
+
+`plots` may be any of `composition`, `donut`, `barplot`, `alpha`, `beta`, `rarefaction`, `heattree`, `upset`, `difftree`. `beta_method` is any name from `archi_beta_methods()`. Grouped plots use the legend column named by `target` (`"stage"` on the bundled legend, `"target"` when the manifest already has that column).
+
+The dropped-sample table is `dropped_samples.csv` (reasons `read_count` and `diversity_curve`). Leave the closing line in place: this is a preliminary report only, not a final analysis.

@@ -263,7 +263,7 @@ kaiju_to_phyloseq <- function(path, pattern = "", legend = NULL, trim_char = FAL
   if (!length(files)) stop("No Kaiju files matched", call. = FALSE)
   long <- do.call(rbind, lapply(files, archi_read_kaiju_file))
   if (!isFALSE(trim_char)) {
-    long$sample <- vapply(strsplit(long$sample, trim_char, fixed = TRUE),
+    long$sample <- vapply(strsplit(as.character(long$sample), trim_char, fixed = TRUE),
                           function(z) z[[1]], character(1))
   }
   archi_assemble_phyloseq(long, legend = archi_read_legend(legend, trim_char))

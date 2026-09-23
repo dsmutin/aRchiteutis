@@ -622,3 +622,100 @@ archi_finish_qiime2r <- function(ps) {
   }
   ps
 }
+
+#' Import an abundance table keyed by NCBI taxid as phyloseq
+#'
+#' Rows are taxids (row names, or a `taxid` / `taxonomy_id` / `taxon_id`
+#' column). Other columns are samples. Lineages come from
+#' [taxids_to_lineage()]; pass `xml` to stay offline. A rank-formula tree is
+#' attached. Host and organelle taxids are dropped.
+#'
+#' @param counts Matrix, data frame, or path to a TSV/CSV.
+#' @param metadata Optional sample legend. QIIME 2 `sample-id` or a first-column
+#'   sample id, plus a `target` column when you have one.
+#' @param xml Optional NCBI taxonomy XML. `NULL` fetches lineages from NCBI.
+#' @param trim_char Split legend sample ids on this character before matching
+#'   them to column names.
+#' @return A `phyloseq` object, or an `archi_phyloseq` list.
+#'
+#' @examples
+#' counts <- system.file("extdata", "abundance-taxid-bee.tsv", package = "aRchiteutis")
+#' xml <- paste(readLines(system.file("extdata", "ncbi_taxonomy.xml",
+#'                                    package = "aRchiteutis"), warn = FALSE),
+#'              collapse = "\n")
+#' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+#' ps <- abundance_taxid_to_phyloseq(counts, metadata = legend, xml = xml,
+#'                                   trim_char = "_")
+#' if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
+#'
+#' @export
+abundance_taxid_to_phyloseq <- function(counts, metadata = NULL, xml = NULL,
+                                       trim_char = FALSE) {
+  parsed <- archi_read_abundance_taxid(counts)
+  lin <- taxids_to_lineage(parsed$taxids, xml = xml)
+  if (any(is.na(lin$taxid))) {
+    missing <- parsed$taxids[is.na(lin$taxid)]
+    stop("No lineage for taxid(s): ", paste(missing, collapse = ", "), call. = FALSE)
+  }
+  ranks <- archi_rank_cols()
+  rows <- list()
+  k <- 0L
+  for (j in seq_len(ncol(parsed$counts))) {
+    for (i in seq_len(nrow(parsed$counts))) {
+      reads <- parsed$counts[i, j]
+      if (!is.finite(reads) || reads <= 0) next
+      k <- k + 1L
+      tip <- as.character(lin$tip_name[[i]])
+      rows[[k]] <- data.frame(
+        sample = colnames(parsed$counts)[[j]],
+        taxid = parsed$taxids[[i]],
+        name = if (is.na(tip) || !nzchar(tip)) paste0("tax_", parsed$taxids[[i]]) else tip,
+        rank = "S",
+        reads = reads,
+        lin[i, ranks, drop = FALSE],
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  if (!length(rows)) stop("Abundance table has no positive counts", call. = FALSE)
+  legend <- NULL
+  if (!is.null(metadata)) {
+    if (is.character(metadata) && length(metadata) == 1L) {
+      legend <- archi_read_sample_metadata(metadata)
+      if (!isFALSE(trim_char)) {
+        rownames(legend) <- vapply(strsplit(rownames(legend), trim_char, fixed = TRUE),
+                                   function(z) z[[1]], character(1))
+      }
+    } else {
+      legend <- as.data.frame(metadata, stringsAsFactors = FALSE)
+    }
+  }
+  archi_assemble_phyloseq(do.call(rbind, rows), legend = legend)
+}
+
+archi_read_abundance_taxid <- function(counts) {
+  if (is.character(counts) && length(counts) == 1L) {
+    lines <- readLines(counts, warn = FALSE)
+    sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+    counts <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
+                                check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+  }
+  if (is.data.frame(counts)) {
+    id_col <- intersect(c("taxid", "taxonomy_id", "taxon_id", "TaxID", "tax_id"), names(counts))
+    if (length(id_col)) {
+      ids <- counts[[id_col[[1]]]]
+      counts[[id_col[[1]]]] <- NULL
+    } else {
+      ids <- rownames(counts)
+    }
+    num <- vapply(counts, function(col) is.numeric(col) || !any(grepl("[A-Za-z]", col)), logical(1))
+    counts <- as.matrix(data.frame(lapply(counts[num], as.numeric), check.names = FALSE))
+    rownames(counts) <- as.character(ids)
+  } else {
+    counts <- as.matrix(counts)
+  }
+  storage.mode(counts) <- "double"
+  taxids <- as.integer(rownames(counts))
+  if (anyNA(taxids)) stop("Abundance row names must be NCBI taxids", call. = FALSE)
+  list(counts = counts, taxids = taxids)
+}

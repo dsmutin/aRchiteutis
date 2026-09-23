@@ -47,6 +47,27 @@ test_that("df2beta_bray is a Bray-Curtis wrapper around df2beta", {
   expect_draws(suppressMessages(df2beta_bray(g)))
 })
 
+test_that("beta methods cover vegan distances and Aitchison aDist", {
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_true("aitchison" %in% archi_beta_methods())
+  bray <- archi_distance_matrix(g, "bray")
+  jac <- archi_distance_matrix(g, "jaccard")
+  ait <- archi_distance_matrix(g, "aitchison")
+  for (m in list(bray, jac, ait)) {
+    expect_true(isSymmetric(m))
+    expect_equal(nrow(m), ncol(m))
+    expect_true(all(is.finite(m)))
+    expect_equal(unname(diag(m)), rep(0, nrow(m)))
+  }
+  expect_true(attr(ait, "zero_method") %in%
+                c("none", "robCompositions::impRZilr", "multRepl_Martin-Fernandez_2003"))
+  expect_error(archi_distance_matrix(g, "not-a-distance"), "Unknown distance")
+  expect_builds(suppressMessages(df2beta_pcoa(g, method = "jaccard", add_legend = 7)))
+  d <- suppressMessages(df2beta(g, method = "euclidean", print_df = TRUE))
+  expect_equal(unname(diag(d)), rep(0, nrow(d)))
+})
+
 test_that("df2beta_pcoa returns a buildable ggplot", {
   df <- archi_df()
   g <- df[df$clade == "G", ]

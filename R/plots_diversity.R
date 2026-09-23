@@ -243,6 +243,10 @@ df_beta_matrix <- function(df, dist_function) {
 #'   labels instead of the sample name.
 #' @param print_df Logical. If `TRUE`, return the distance matrix instead of
 #'   drawing.
+#' @param method Optional distance name from [archi_beta_methods()], including
+#'   `"aitchison"` (`robCompositions::aDist`) and the phyloseq set
+#'   (`"bray"`, `"jaccard"`, `"unifrac"`, `"wunifrac"`, `"jsd"`, `"dpcoa"`).
+#'   When `NULL`, `dist_function` is used (Bray-Curtis by default).
 #' @param ... Unused; kept for backward compatibility.
 #'
 #' @return Invisibly, the ggplot object (a heatmap is drawn as a side effect);
@@ -258,7 +262,7 @@ df_beta_matrix <- function(df, dist_function) {
 df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
                     treshhold_up = 1, treshhold_down = 0,
                     add_legend = FALSE, add_labels = FALSE,
-                    print_df = FALSE, ...) {
+                    print_df = FALSE, method = NULL, ...) {
 
   pallete <- viridis::viridis(256)
 
@@ -288,12 +292,17 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
   df <- df[df$taxa %in% df_taxa, ]
 
   if (print_df) {
+    if (!is.null(method)) return(archi_distance_matrix(df, method))
     return(df_beta_matrix(df, dist_function))
   }
 
   draw <- function(df, ...) {
-    mat <- df_beta_matrix(df, dist_function)
-    mat[1, 1] <- 1
+    mat <- if (!is.null(method)) {
+      archi_distance_matrix(df, method)
+    } else {
+      df_beta_matrix(df, dist_function)
+    }
+    if (is.null(method)) mat[1, 1] <- 1
     ord <- stats::hclust(stats::as.dist(mat), method = "ward.D2")$order
     mat <- mat[ord, ord, drop = FALSE]
     long <- as.data.frame(as.table(mat), stringsAsFactors = FALSE)
@@ -383,7 +392,8 @@ df2beta_bray <- function(df, ...) {
 #' @importFrom rlang .data
 df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
                          treshhold_up = 1, treshhold_down = 0,
-                         add_legend = FALSE, add_ellipse = FALSE, ...) {
+                         add_legend = FALSE, add_ellipse = FALSE,
+                         method = NULL, ...) {
 
   df_legend <- unique(df[, -c(1:2, 4:6)])
 
@@ -401,13 +411,17 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
     leg2 <- NULL
   }
 
-  pcoa_df <- df %>%
-    df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
-    as.data.frame() %>%
-    t() %>%
-    usedist::dist_make(dist_function) %>%
-    as.matrix() %>%
-    ape::pcoa()
+  pcoa_df <- if (!is.null(method)) {
+    ape::pcoa(archi_distance_matrix(df, method))
+  } else {
+    df %>%
+      df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
+      as.data.frame() %>%
+      t() %>%
+      usedist::dist_make(dist_function) %>%
+      as.matrix() %>%
+      ape::pcoa()
+  }
 
   vectors <- as.data.frame(pcoa_df$vectors)
   vectors$leg1 <- forcats::fct_inorder(factor(leg1))

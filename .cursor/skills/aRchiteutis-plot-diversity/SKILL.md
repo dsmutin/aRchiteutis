@@ -22,6 +22,13 @@ df2beta_pcoa(g, add_legend = 7, add_ellipse = 7)      # ggplot PCoA
 
 `split_by` / `add_legend` / `add_ellipse` are **column numbers** of the tidy table (legend fields start at column 7 after `get_counts()` + CSV legend).
 
-`df2beta(..., print_df = TRUE)` returns the distance matrix instead of drawing. Distances default to `abdiv::bray_curtis`; override with `dist_function`.
+`df2beta(..., print_df = TRUE)` returns the distance matrix instead of drawing. Distances default to `abdiv::bray_curtis`. Pass `method` for the wider set in `archi_beta_methods()`: vegan distances, `"aitchison"` (`robCompositions::aDist`), and phyloseq `"unifrac"` / `"wunifrac"` / `"jsd"` / `"dpcoa"`.
+
+```r
+archi_distance_matrix(g, method = "jaccard")
+archi_distance_matrix(g, method = "aitchison")
+df2beta(g, method = "aitchison", print_df = TRUE)
+df2beta_pcoa(g, method = "jaccard", add_legend = 7)
+```
 
 Images: `vignettes.md` (alpha, beta, beta_pca).

@@ -53,7 +53,7 @@ archi_sanitize_tax_df <- function(tax_df, cols) {
   as.data.frame(lapply(keep, function(x) {
     x <- as.character(x)
     x[is.na(x) | !nzchar(x)] <- "Unclassified"
-    x <- gsub("/", "_", x, fixed = TRUE)
+    x <- gsub("[[:punct:]]", "_", x)
     factor(x, levels = unique(x))
   }), stringsAsFactors = FALSE)
 }

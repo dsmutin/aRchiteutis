@@ -29,5 +29,7 @@ utils::globalVariables(c(
   "value", "name", "x", "y", "ymax", "ymin", "split", "sample2",
   "logAC", "p", "sd", "Axis.1", "Axis.2", "group", "cluster", "amount_log",
   # ggraph node/edge computed aesthetics
-  "vals"
+  "vals",
+  "Measure", "Depth", "Sample", "target", "combo", "set", "in_set",
+  "taxon_names", "n_obs"
 ))

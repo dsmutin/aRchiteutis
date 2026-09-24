@@ -80,9 +80,7 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/composition.png" alt="Stacked composition bars" width="720">
 
-`df2barplot()` — amount per taxon. The default geometry is a box plot; `style = "raincloud"` draws a ggviolinbox raincloud.
-
-<img src="img/barplot.png" alt="Box plot of taxon amounts" width="720">
+`df2barplot()` — amount per taxon. `style = "raincloud"` draws a ggviolinbox raincloud.
 
 <img src="img/barplot_raincloud.png" alt="Raincloud of taxon amounts" width="720">
 
@@ -110,15 +108,15 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 ### Taxonomy
 
-`df2heattree()` — rank tree sized and coloured by mean abundance.
+`df2heattree()` — metacoder heat tree. Node size is the number of taxa, colour is mean relative abundance. The function stops when \pkg{metacoder} is not installed.
 
 <img src="img/heattree.png" alt="Taxonomic heat tree" width="720">
 
-`df2difftree()` — log2 fold change between two groups on that tree. With more than two groups, pass `contrast`.
+`df2difftree()` — log2 fold change between two groups on a ggtree layout, with a \pkg{ggtreeExtra} fruit bar at each tip. With more than two groups, pass `contrast`. `engine = "metacoder"` draws the same fold changes with `metacoder::heat_tree` and stops when that package is not installed.
 
 <img src="img/difftree.png" alt="Differential abundance tree" width="720">
 
-`df2upset()` — taxon presence intersections across groups.
+`df2upset()` — taxon presence as a ComplexUpset plot. The function stops when \pkg{ComplexUpset} is not installed.
 
 <img src="img/upset.png" alt="UpSet of taxon presence" width="720">
 

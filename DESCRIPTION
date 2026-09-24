@@ -31,6 +31,8 @@ Imports:
     ggplot2,
     ggraph,
     ggrepel,
+    ggtree,
+    ggtreeExtra,
     igraph,
     magrittr,
     methods,
@@ -45,8 +47,7 @@ Imports:
     viridis
 Suggests:
     biomformat,
-    ggtree,
-    ggtreeExtra,
+    ComplexUpset,
     ggviolinbox,
     metacoder,
     phyloseq,

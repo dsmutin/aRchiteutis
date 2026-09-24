@@ -2,31 +2,34 @@
 % Please edit documentation in R/plots_harness.R
 \name{df2heattree}
 \alias{df2heattree}
-\title{Taxonomic heat tree}
+\title{Taxonomic heat tree (metacoder only)}
 \usage{
 df2heattree(df, tax = NULL, top = 20L)
 }
 \arguments{
-\item{df}{A tidy table from \code{\link[=get_counts]{get_counts()}}, or ignored when \code{tax} is given.}
+\item{df}{A tidy table from \code{\link[=get_counts]{get_counts()}}.}
 
 \item{tax}{Optional data frame with rank columns (\code{kingdom} … \code{species} or
 \code{Genus} / \code{Species}) and a \code{taxa} column matching \code{df$taxa}. Row names may
-be used instead of \code{taxa}.}
+be used instead of \code{taxa}. When \code{NULL}, genus and species are parsed from
+the taxon labels.}
 
-\item{top}{Integer. Most abundant tips to draw in the ggplot layout.}
+\item{top}{Integer. Most abundant taxa to keep.}
 }
 \value{
-A plot object (\link[ggplot2:ggplot]{ggplot2::ggplot}, or the metacoder heat-tree grob).
+The plot returned by \link[metacoder:heat_tree]{metacoder::heat_tree}.
 }
 \description{
-Builds a rank tree and colours nodes by mean relative abundance. When
-\pkg{metacoder} is installed and \code{tax} contains Linnaean rank columns, the
-harness \code{metacoder::heat_tree} layout is used. Otherwise nodes of a
-genus/species formula tree are drawn with \pkg{ggplot2} (size = abundance).
+Builds a metacoder taxmap and draws \link[metacoder:heat_tree]{metacoder::heat_tree}. Node size is
+the number of taxa under the node (\code{n_obs}). Colour is mean relative
+abundance. There is no ggplot fallback: the function stops when
+\pkg{metacoder} is not installed.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")
 df <- get_counts(path, pattern = "m1[12]_", trim_char = "_")
-df2heattree(df[df$clade == "S", ], top = 15)
+if (requireNamespace("metacoder", quietly = TRUE)) {
+  df2heattree(df[df$clade == "S", ], top = 15)
+}
 
 }

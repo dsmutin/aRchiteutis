@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots_harness.R
 \name{df2upset}
 \alias{df2upset}
-\title{Presence / absence UpSet bars across groups}
+\title{Presence / absence UpSet plot across groups}
 \usage{
 df2upset(df, group, min_size = 1L)
 }
@@ -14,19 +14,19 @@ df2upset(df, group, min_size = 1L)
 \item{min_size}{Integer. Drop intersections smaller than this.}
 }
 \value{
-A \link[ggplot2:ggplot]{ggplot2::ggplot} object (a patchwork-free single plot with the
-combination matrix encoded as points under the bars).
+The plot returned by \link[ComplexUpset:upset]{ComplexUpset::upset}.
 }
 \description{
 A taxon is present in a group when it has a positive count in any sample of
-that group (the harness fallback when MicrobiotaProcess is not used). Bars
-show intersection sizes; the matrix underneath marks which groups belong to
-each intersection.
+that group. The drawing is \link[ComplexUpset:upset]{ComplexUpset::upset}, the same plot the harness
+script writes. The function stops when \pkg{ComplexUpset} is not installed.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")
 legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 df <- get_counts(path, pattern = "decont_b", legend = legend, trim_char = "_")
-df2upset(df[df$clade == "G", ], group = "stage")
+if (requireNamespace("ComplexUpset", quietly = TRUE)) {
+  df2upset(df[df$clade == "G", ], group = "stage")
+}
 
 }

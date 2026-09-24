@@ -39,8 +39,30 @@ test_that("differential tree uses a rank formula, not a binary hclust", {
 test_that("heat tree and upset plots build on the bundled reports", {
   g <- archi_df()
   g <- g[g$clade == "G", ]
+  skip_if_not_installed("metacoder")
   expect_builds(df2heattree(g, top = 10))
-  expect_builds(df2upset(g, group = "stage", min_size = 1))
+  skip_if_not_installed("ComplexUpset")
+  p <- df2upset(g, group = "stage", min_size = 1)
+  expect_s3_class(p, "ggplot")
+  expect_no_error(withr::with_pdf(tempfile(fileext = ".pdf"), print(p)))
+})
+
+test_that("heat tree and metacoder difftree stop without metacoder", {
+  skip_if(requireNamespace("metacoder", quietly = TRUE))
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_error(df2heattree(g, top = 10), "metacoder")
+  expect_error(
+    df2difftree(g, group = "stage", max_tips = 8, engine = "metacoder"),
+    "metacoder"
+  )
+})
+
+test_that("upset stops without ComplexUpset", {
+  skip_if(requireNamespace("ComplexUpset", quietly = TRUE))
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_error(df2upset(g, group = "stage"), "ComplexUpset")
 })
 
 test_that("metacoder heat tree receives a taxon_id abundance table", {

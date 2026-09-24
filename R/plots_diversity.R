@@ -9,6 +9,8 @@
 #'   into groups on the x-axis.
 #' @param add_legend Integer column index/indices (or `FALSE`) whose values are
 #'   combined into the colour legend.
+#' @param style One of `"violin"` (violin with a box of the same fill inside),
+#'   `"box"`, or `"raincloud"` (half-violin and half-box from \pkg{ggviolinbox}).
 #' @param ... Passed to the geoms.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -19,13 +21,18 @@
 #' df <- get_counts(path = path, pattern = "m1[124]_", legend = legend,
 #'                  trim_char = "_")
 #' df2alpha_summary(df[df$clade == "S", ])
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2alpha_summary(df[df$clade == "S", ], split_by = 7, style = "raincloud")
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
 #' @importFrom abdiv dominance simpson simpson_e invsimpson shannon brillouin_d
 #'   heip_e pielou_e strong mcintosh_d berger_parker_d richness mcintosh_e
 #'   menhinick margalef kempton_taylor_q bray_curtis
-df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
+df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE,
+                           style = c("violin", "box", "raincloud"), ...) {
+  style <- match.arg(style)
   gg <- df %>%
     dplyr::group_by(sample) %>%
     dplyr::summarise(dplyr::across(N, list(
@@ -53,7 +60,7 @@ df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
   gg <- tidyr::pivot_longer(gg, cols = -1)
   gg$name <- forcats::fct_inorder(factor(stringr::str_remove_all(gg$name, "N_")))
 
-  df2diversity_plot(df, gg, split_by, add_legend, violin = TRUE, ...)
+  df2diversity_plot(df, gg, split_by, add_legend, style = style, ...)
 }
 
 #' Alpha diversity for a chosen set of metrics
@@ -64,6 +71,7 @@ df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
 #' @inheritParams df2alpha_summary
 #' @param alpha_function_list Named list of diversity functions (defaults to
 #'   Shannon and Simpson from \pkg{abdiv}).
+#' @param style One of `"box"` (default), `"violin"`, or `"raincloud"`.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -77,7 +85,9 @@ df2alpha_summary <- function(df, split_by = FALSE, add_legend = FALSE, ...) {
 df2alpha <- function(df, split_by = FALSE, add_legend = FALSE,
                      alpha_function_list = list(Shannon = abdiv::shannon,
                                                 Simpson = abdiv::simpson),
+                     style = c("box", "violin", "raincloud"),
                      ...) {
+  style <- match.arg(style)
   gg <- df %>%
     dplyr::group_by(sample) %>%
     dplyr::summarise(dplyr::across(N, alpha_function_list))
@@ -85,11 +95,38 @@ df2alpha <- function(df, split_by = FALSE, add_legend = FALSE,
   gg <- tidyr::pivot_longer(gg, cols = -1)
   gg$name <- forcats::fct_inorder(factor(stringr::str_remove_all(gg$name, "N_")))
 
-  df2diversity_plot(df, gg, split_by, add_legend, violin = FALSE, ...)
+  df2diversity_plot(df, gg, split_by, add_legend, style = style, ...)
+}
+
+# Half-violin + half-box from ggviolinbox (harness raincloud style).
+archi_rain_layers <- function(fill_mapping = NULL, constant_fill = NULL,
+                              orientation = NA) {
+  if (!requireNamespace("ggviolinbox", quietly = TRUE)) {
+    stop(
+      "style = \"raincloud\" needs ggviolinbox. Install it with ",
+      "remotes::install_github(\"dsmutin/ggviolinbox\").",
+      call. = FALSE
+    )
+  }
+  extra <- list(panel = "right", nudge = 0.08, trim = TRUE, width = 0.5,
+                alpha = 0.45, colour = "grey35", show.legend = FALSE,
+                orientation = orientation)
+  box_extra <- list(panel = "left", nudge = -0.08, width = 0.22,
+                    outliers = FALSE, alpha = 0.95, colour = "grey20",
+                    show.legend = FALSE, orientation = orientation)
+  if (!is.null(constant_fill)) {
+    extra$fill <- constant_fill
+    box_extra$fill <- constant_fill
+  }
+  violin <- do.call(ggviolinbox::geom_halfviolin, c(list(mapping = fill_mapping), extra))
+  box <- do.call(ggviolinbox::geom_halfboxplot, c(list(mapping = fill_mapping), box_extra))
+  list(violin, box)
 }
 
 # Shared plotting backend for df2alpha() / df2alpha_summary().
-df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
+df2diversity_plot <- function(df, gg, split_by, add_legend,
+                              style = c("violin", "box", "raincloud"), ...) {
+  style <- match.arg(style)
   if (!isFALSE(add_legend)) {
     leg <- unique(df[, c(3, add_legend)])
     leg[, 2] <- apply(leg[, -1, drop = FALSE], 1,
@@ -107,7 +144,9 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
     gg <- dplyr::left_join(leg2[, 1:2], gg, by = "sample")
 
     p <- ggplot2::ggplot(gg, ggplot2::aes(y = .data$value, x = .data$split))
-    p <- p + if (violin) {
+    p <- p + if (identical(style, "raincloud")) {
+      archi_rain_layers(ggplot2::aes(fill = .data$split))
+    } else if (identical(style, "violin")) {
       list(
         ggplot2::geom_violin(trim = TRUE, scale = "width",
                              ggplot2::aes(fill = .data$split), alpha = 0.35,
@@ -148,7 +187,9 @@ df2diversity_plot <- function(df, gg, split_by, add_legend, violin, ...) {
           ggplot2::guide_legend(nrow = 2, override.aes = list(size = 2)))
   } else {
     p <- ggplot2::ggplot(gg, ggplot2::aes(x = .data$value, y = .data$name))
-    p <- p + if (violin) {
+    p <- p + if (identical(style, "raincloud")) {
+      archi_rain_layers(constant_fill = "grey80", orientation = "y")
+    } else if (identical(style, "violin")) {
       list(
         ggplot2::geom_violin(trim = TRUE, scale = "width",
                              fill = "grey80", colour = "grey35", alpha = 0.6),
@@ -202,6 +243,10 @@ df_beta_matrix <- function(df, dist_function) {
 #'   labels instead of the sample name.
 #' @param print_df Logical. If `TRUE`, return the distance matrix instead of
 #'   drawing.
+#' @param method Optional distance name from [archi_beta_methods()], including
+#'   `"aitchison"` (`robCompositions::aDist`) and the phyloseq set
+#'   (`"bray"`, `"jaccard"`, `"unifrac"`, `"wunifrac"`, `"jsd"`, `"dpcoa"`).
+#'   When `NULL`, `dist_function` is used (Bray-Curtis by default).
 #' @param ... Unused; kept for backward compatibility.
 #'
 #' @return Invisibly, the ggplot object (a heatmap is drawn as a side effect);
@@ -217,7 +262,7 @@ df_beta_matrix <- function(df, dist_function) {
 df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
                     treshhold_up = 1, treshhold_down = 0,
                     add_legend = FALSE, add_labels = FALSE,
-                    print_df = FALSE, ...) {
+                    print_df = FALSE, method = NULL, ...) {
 
   pallete <- viridis::viridis(256)
 
@@ -247,12 +292,17 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
   df <- df[df$taxa %in% df_taxa, ]
 
   if (print_df) {
+    if (!is.null(method)) return(archi_distance_matrix(df, method))
     return(df_beta_matrix(df, dist_function))
   }
 
   draw <- function(df, ...) {
-    mat <- df_beta_matrix(df, dist_function)
-    mat[1, 1] <- 1
+    mat <- if (!is.null(method)) {
+      archi_distance_matrix(df, method)
+    } else {
+      df_beta_matrix(df, dist_function)
+    }
+    if (is.null(method)) mat[1, 1] <- 1
     ord <- stats::hclust(stats::as.dist(mat), method = "ward.D2")$order
     mat <- mat[ord, ord, drop = FALSE]
     long <- as.data.frame(as.table(mat), stringsAsFactors = FALSE)
@@ -295,7 +345,7 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
         ggplot2::scale_x_discrete(drop = FALSE)
     }
 
-    print(p)
+    if (interactive()) print(p)
     invisible(p)
   }
 
@@ -342,7 +392,8 @@ df2beta_bray <- function(df, ...) {
 #' @importFrom rlang .data
 df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
                          treshhold_up = 1, treshhold_down = 0,
-                         add_legend = FALSE, add_ellipse = FALSE, ...) {
+                         add_legend = FALSE, add_ellipse = FALSE,
+                         method = NULL, ...) {
 
   df_legend <- unique(df[, -c(1:2, 4:6)])
 
@@ -360,13 +411,17 @@ df2beta_pcoa <- function(df, dist_function = abdiv::bray_curtis,
     leg2 <- NULL
   }
 
-  pcoa_df <- df %>%
-    df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
-    as.data.frame() %>%
-    t() %>%
-    usedist::dist_make(dist_function) %>%
-    as.matrix() %>%
-    ape::pcoa()
+  pcoa_df <- if (!is.null(method)) {
+    ape::pcoa(archi_distance_matrix(df, method))
+  } else {
+    df %>%
+      df_untidy(drop_unclassified = TRUE, scale = FALSE) %>%
+      as.data.frame() %>%
+      t() %>%
+      usedist::dist_make(dist_function) %>%
+      as.matrix() %>%
+      ape::pcoa()
+  }
 
   vectors <- as.data.frame(pcoa_df$vectors)
   vectors$leg1 <- forcats::fct_inorder(factor(leg1))

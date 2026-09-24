@@ -1,0 +1,4 @@
+taxid	tip_name	tip_rank	kingdom	phylum	class	order	family	genus	species
+562	Escherichia coli	species	Pseudomonadati	Pseudomonadota	Gammaproteobacteria	Enterobacterales	Enterobacteriaceae	Escherichia	Escherichia coli
+1578	Lactobacillus	genus	Bacillati	Bacillota	Bacilli	Lactobacillales	Lactobacillaceae	Lactobacillus	NA
+1213723	Staphylococcus aureus M0663	strain	Bacillati	Bacillota	Bacilli	Caryophanales	Staphylococcaceae	Staphylococcus	Staphylococcus aureus

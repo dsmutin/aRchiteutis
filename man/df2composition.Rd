@@ -4,16 +4,23 @@
 \alias{df2composition}
 \title{Stacked bar plot of composition per sample}
 \usage{
-df2composition(df)
+df2composition(
+  df,
+  order_samples = c("fpc", "hclust", "abundance", "alpha", "none")
+)
 }
 \arguments{
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}.}
+
+\item{order_samples}{Sample order. See Details.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
-Stacked bar plot of composition per sample
+Samples are ordered by the first principal component of the composition
+matrix (\code{order_samples = "fpc"}). Other orders: \code{"hclust"}, \code{"abundance"},
+\code{"alpha"}, \code{"none"}.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

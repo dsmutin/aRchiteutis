@@ -17,6 +17,31 @@ suppressMessages(suppressWarnings({
     trim_char = "_")
 }))
 
+# phyloseq S4 `[` methods return otu_table / sample_data, not vectors.
+archi_plain_otu <- function(ps) {
+  x <- if (inherits(ps, "phyloseq")) phyloseq::otu_table(ps) else ps$otu_table
+  if (inherits(x, "otu_table")) x <- methods::as(x, "matrix")
+  x <- as.matrix(x)
+  class(x) <- "matrix"
+  x
+}
+
+archi_plain_tax <- function(ps) {
+  x <- if (inherits(ps, "phyloseq")) phyloseq::tax_table(ps) else ps$tax_table
+  if (inherits(x, "tax_table")) x <- methods::as(x, "matrix")
+  df <- as.data.frame(as.matrix(x), stringsAsFactors = FALSE)
+  class(df) <- "data.frame"
+  df
+}
+
+archi_plain_sam <- function(ps) {
+  x <- if (inherits(ps, "phyloseq")) phyloseq::sample_data(ps) else ps$sample_data
+  if (inherits(x, "sample_data")) x <- methods::as(x, "data.frame")
+  df <- as.data.frame(x, stringsAsFactors = FALSE)
+  class(df) <- "data.frame"
+  df
+}
+
 # Accessors keep individual tests terse.
 archi_df <- function() .archi_df
 

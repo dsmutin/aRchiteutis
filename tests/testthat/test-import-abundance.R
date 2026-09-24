@@ -1,0 +1,23 @@
+test_that("a real taxid abundance table becomes phyloseq", {
+  counts <- system.file("extdata", "abundance-taxid-bee.tsv", package = "aRchiteutis")
+  xml <- paste(readLines(system.file("extdata", "ncbi_taxonomy.xml",
+                                     package = "aRchiteutis"), warn = FALSE),
+               collapse = "\n")
+  legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+  ps <- abundance_taxid_to_phyloseq(counts, metadata = legend, xml = xml,
+                                    trim_char = "_")
+  otu <- archi_plain_otu(ps)
+  tax <- archi_plain_tax(ps)
+  sam <- archi_plain_sam(ps)
+  tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
+  expect_equal(ncol(otu), 2L)
+  expect_true(all(c("m11", "m12") %in% colnames(otu)))
+  expect_equal(otu["tax_562", "m11"], 66)
+  expect_equal(otu["tax_1578", "m12"], 14)
+  expect_true(any(grepl("Escherichia coli", tax$species)))
+  expect_equal(as.character(sam["m11", "stage"]), "larvae")
+  expect_equal(sam["m11", "profile_reads"], 74)
+  expect_s3_class(tree, "phylo")
+  expect_true(ape::Ntip(tree) >= 2)
+  expect_setequal(tree$tip.label, rownames(otu))
+})

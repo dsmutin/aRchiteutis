@@ -31,9 +31,9 @@ Imports:
     ggplot2,
     ggraph,
     ggrepel,
-    grDevices,
     igraph,
     magrittr,
+    methods,
     rlang,
     stats,
     stringr,
@@ -44,10 +44,21 @@ Imports:
     utils,
     viridis
 Suggests:
+    biomformat,
+    ggtree,
+    ggtreeExtra,
+    ggviolinbox,
+    metacoder,
     phyloseq,
+    qiime2R,
     reticulate,
+    robCompositions,
     testthat (>= 3.0.0),
+    vegan,
     withr
+Remotes:
+    dsmutin/ggviolinbox,
+    jbisanz/qiime2R
 Config/testthat/edition: 3
 URL: https://github.com/dsmutin/aRchiteutis
 BugReports: https://github.com/dsmutin/aRchiteutis/issues

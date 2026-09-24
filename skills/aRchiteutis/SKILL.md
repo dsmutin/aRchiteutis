@@ -19,8 +19,13 @@ Then pick **one** loader, transform, and plot. Do not invent new column names; e
 | Source | Call | Skill |
 | --- | --- | --- |
 | Kraken2 / Kaiju / Bracken reports | `get_counts(path, pattern, legend, trim_char, output_type)` | `aRchiteutis-load-kraken` |
+| Kraken / Kraken2 / KrakenUniq / Bracken → phyloseq | `kraken_to_phyloseq(path, pattern, rank, legend, trim_char)` | `aRchiteutis-import-kraken` |
+| Kaiju → phyloseq | `kaiju_to_phyloseq(path, pattern, legend, trim_char)` | `aRchiteutis-import-kaiju` |
+| QIIME 2 `.qza` artifacts → phyloseq | `qza_to_phyloseq(features, taxonomy, metadata, tree)` | `aRchiteutis-import-qza` |
+| Abundance table with NCBI taxids → phyloseq | `abundance_taxid_to_phyloseq(counts, metadata, xml)` | `aRchiteutis-import-abundance` |
 | Abundance matrix / CSV | `from_abundance(x, clade, legend)` | `aRchiteutis-load-abundance` |
 | phyloseq object or unpacked list | `from_phyloseq(physeq, taxa_rank)` | `aRchiteutis-load-phyloseq` |
+| Taxids or a rank table → taxonomy tree | `taxids_to_tree()` / `ranks_to_tree()` | `aRchiteutis-taxonomy-tree` |
 | Python-loaded table | dump with `inst/python/python2r.py`, then `python2r(csv, clade)` | `aRchiteutis-load-python` |
 
 Example Kraken2 (bundled data):
@@ -44,9 +49,14 @@ matG <- df_untidy(df, clade = "G", top = 30, scale = "scale")
 
 ## 3. Visualize
 
-- Composition (`df2donut`, `df2composition`, `df2barplot`) → `aRchiteutis-plot-composition`
-- Diversity (`df2alpha_summary`, `df2alpha`, `df2beta`, `df2beta_pcoa`) → `aRchiteutis-plot-diversity`
+- Composition (`df2donut`, `df2composition`, `df2barplot`) → `aRchiteutis-plot-composition`. `df2composition(..., order_samples = "fpc")` is the default sample order; `hclust`, `abundance`, `alpha` and `none` are the other choices. `df2barplot(..., style = "raincloud")` uses ggviolinbox.
+- Diversity (`df2alpha_summary`, `df2alpha`, `df2beta`, `df2beta_pcoa`) → `aRchiteutis-plot-diversity`. `style = "raincloud"` on the alpha plots. `df2beta(..., method = "aitchison")` and the other names from `archi_beta_methods()`.
+- Rarefaction, differential tree, heat tree, UpSet (`df2rarefaction`, `df2difftree`, `df2heattree`, `df2upset`) → `aRchiteutis-plot-rarefaction`, `aRchiteutis-plot-difftree`, `aRchiteutis-plot-heattree`.
 - Ordination / networks (`df2heatmap`, `df2cluster`, `df2clust2d`, `df2corrplot`, `df2chord`, `df2tsne`, `df2volcano`, `df2pca_sample`, `df2pca_sp`) → `aRchiteutis-plot-ordination`
+
+## 4. Preliminary report
+
+`archi_report()` is the only report entry point. See `aRchiteutis-report`. Pass `plots` and `beta_method` to rebuild the draft with a different subset. The HTML must keep the sentence that this is a preliminary report only.
 
 Gallery with images: `vignettes.md`. Demo script: `pipeline.R`.
 

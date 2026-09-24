@@ -44,9 +44,49 @@ df2donut <- function(df, ...) {
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2))
 }
 
+#' Order composition-bar samples
+#'
+#' `"fpc"` sorts by the first principal component of the sample-by-taxon
+#' matrix (the same score order the harness uses for adjacency matrices).
+#' `"hclust"` follows average-linkage Bray-Curtis. `"abundance"` and
+#' `"alpha"` sort by total amount and Shannon. `"none"` keeps input order.
+#'
+#' @keywords internal
+archi_order_sample_levels <- function(df, method = "fpc") {
+  method <- match.arg(method, c("fpc", "hclust", "abundance", "alpha", "none"))
+  samples <- unique(as.character(df$sample))
+  if (length(samples) < 2L || identical(method, "none")) return(samples)
+  mat <- df_untidy(df, amount_from = "amount")
+  mat <- mat[, intersect(samples, colnames(mat)), drop = FALSE]
+  if (ncol(mat) < 2L) return(samples)
+  ord <- if (identical(method, "fpc")) {
+    X <- t(mat)
+    X <- X[, colSums(X) > 0, drop = FALSE]
+    if (ncol(X) < 2L) {
+      colnames(mat)
+    } else {
+      pc <- stats::prcomp(X, center = TRUE, scale. = FALSE)
+      rownames(pc$x)[order(pc$x[, 1])]
+    }
+  } else if (identical(method, "hclust")) {
+    d <- usedist::dist_make(as.data.frame(t(mat)), abdiv::bray_curtis)
+    colnames(mat)[stats::hclust(d, method = "average")$order]
+  } else if (identical(method, "abundance")) {
+    names(sort(colSums(mat), decreasing = TRUE))
+  } else {
+    names(sort(apply(mat, 2, abdiv::shannon), decreasing = TRUE))
+  }
+  c(ord, setdiff(samples, ord))
+}
+
 #' Stacked bar plot of composition per sample
 #'
+#' Samples are ordered by the first principal component of the composition
+#' matrix (`order_samples = "fpc"`). Other orders: `"hclust"`, `"abundance"`,
+#' `"alpha"`, `"none"`.
+#'
 #' @param df A tidy `tibble` from [get_counts()].
+#' @param order_samples Sample order. See Details.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -57,12 +97,14 @@ df2donut <- function(df, ...) {
 #'
 #' @export
 #' @importFrom rlang .data
-df2composition <- function(df) {
+df2composition <- function(df, order_samples = c("fpc", "hclust", "abundance", "alpha", "none")) {
+  order_samples <- match.arg(order_samples)
   df <- df_tidy_drop_unclassified(df)
   totals <- dplyr::summarise(df, .total = sum(.data$amount), .by = "sample")
   df <- dplyr::left_join(df, totals, by = "sample")
   df$amount <- ifelse(df$.total > 0, df$amount / df$.total, 0)
   df$.total <- NULL
+  df$sample <- factor(df$sample, levels = archi_order_sample_levels(df, order_samples))
 
   lvir <- length(levels(factor(df$taxa)))
 
@@ -70,8 +112,10 @@ df2composition <- function(df) {
                                    fill = forcats::fct_inorder(.data$taxa))) +
     ggplot2::geom_col(position = "stack") +
     ggplot2::scale_fill_discrete("Taxa", type = rev(viridis::viridis(lvir))) +
-    ggplot2::scale_x_continuous(limits = c(0, 1),
-                                expand = ggplot2::expansion(mult = c(0, 0.02))) +
+    ggplot2::scale_x_continuous(
+      expand = ggplot2::expansion(mult = c(0, 0.02))
+    ) +
+    ggplot2::coord_cartesian(xlim = c(0, 1)) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(
       legend.position = "bottom",
@@ -85,6 +129,8 @@ df2composition <- function(df) {
 #' Box plot of per-sample composition across taxa
 #'
 #' @param df A tidy `tibble` from [get_counts()].
+#' @param style `"box"` or `"raincloud"` (half-violin and half-box via
+#'   \pkg{ggviolinbox}, same fill as the box).
 #' @param ... Reserved for future use.
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -93,10 +139,15 @@ df2composition <- function(df) {
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
 #' df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6))
+#' if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+#'   df2barplot(df_taxa_trim(df[df$clade != "S", ], top_taxa = 6),
+#'              style = "raincloud")
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
-df2barplot <- function(df, ...) {
+df2barplot <- function(df, ..., style = c("box", "raincloud")) {
+  style <- match.arg(style)
   lvir <- length(levels(droplevels(factor(df$taxa))))
 
   df_sum <- dplyr::summarise(df, m = mean(amount), .by = "taxa")
@@ -112,9 +163,16 @@ df2barplot <- function(df, ...) {
   floor_val <- if (length(pos)) min(pos) else 0
   df$amount_log <- log10(df$amount + floor_val)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
-                                   fill = .data$taxa)) +
-    ggplot2::geom_boxplot(show.legend = FALSE) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$amount_log, y = .data$taxa,
+                                       fill = .data$taxa))
+  if (identical(style, "raincloud")) {
+    p <- p + archi_rain_layers(
+      ggplot2::aes(fill = .data$taxa), orientation = "y"
+    )
+  } else {
+    p <- p + ggplot2::geom_boxplot(show.legend = FALSE)
+  }
+  p +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::xlab(expression(log[10](x + min(x[x > 0])))) +
     ggplot2::ylab("") +

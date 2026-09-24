@@ -11,6 +11,7 @@ df2beta_pcoa(
   treshhold_down = 0,
   add_legend = FALSE,
   add_ellipse = FALSE,
+  method = NULL,
   ...
 )
 }
@@ -28,6 +29,11 @@ coloured point next to each sample.}
 
 \item{add_ellipse}{Integer column index/indices (or \code{FALSE}) used to draw
 grouping ellipses.}
+
+\item{method}{Optional distance name from \code{\link[=archi_beta_methods]{archi_beta_methods()}}, including
+\code{"aitchison"} (\code{robCompositions::aDist}) and the phyloseq set
+(\code{"bray"}, \code{"jaccard"}, \code{"unifrac"}, \code{"wunifrac"}, \code{"jsd"}, \code{"dpcoa"}).
+When \code{NULL}, \code{dist_function} is used (Bray-Curtis by default).}
 
 \item{...}{Unused; kept for backward compatibility.}
 }

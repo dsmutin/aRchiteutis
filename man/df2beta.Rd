@@ -13,6 +13,7 @@ df2beta(
   add_legend = FALSE,
   add_labels = FALSE,
   print_df = FALSE,
+  method = NULL,
   ...
 )
 }
@@ -35,6 +36,11 @@ labels instead of the sample name.}
 
 \item{print_df}{Logical. If \code{TRUE}, return the distance matrix instead of
 drawing.}
+
+\item{method}{Optional distance name from \code{\link[=archi_beta_methods]{archi_beta_methods()}}, including
+\code{"aitchison"} (\code{robCompositions::aDist}) and the phyloseq set
+(\code{"bray"}, \code{"jaccard"}, \code{"unifrac"}, \code{"wunifrac"}, \code{"jsd"}, \code{"dpcoa"}).
+When \code{NULL}, \code{dist_function} is used (Bray-Curtis by default).}
 
 \item{...}{Unused; kept for backward compatibility.}
 }

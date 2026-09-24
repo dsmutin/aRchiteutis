@@ -4,7 +4,13 @@
 \alias{df2alpha_summary}
 \title{Summary of many alpha-diversity metrics per sample}
 \usage{
-df2alpha_summary(df, split_by = FALSE, add_legend = FALSE, ...)
+df2alpha_summary(
+  df,
+  split_by = FALSE,
+  add_legend = FALSE,
+  style = c("violin", "box", "raincloud"),
+  ...
+)
 }
 \arguments{
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}}. Retain species-level rows for
@@ -15,6 +21,9 @@ into groups on the x-axis.}
 
 \item{add_legend}{Integer column index/indices (or \code{FALSE}) whose values are
 combined into the colour legend.}
+
+\item{style}{One of \code{"violin"} (violin with a box of the same fill inside),
+\code{"box"}, or \code{"raincloud"} (half-violin and half-box from \pkg{ggviolinbox}).}
 
 \item{...}{Passed to the geoms.}
 }
@@ -31,5 +40,8 @@ legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m1[124]_", legend = legend,
                  trim_char = "_")
 df2alpha_summary(df[df$clade == "S", ])
+if (requireNamespace("ggviolinbox", quietly = TRUE)) {
+  df2alpha_summary(df[df$clade == "S", ], split_by = 7, style = "raincloud")
+}
 
 }

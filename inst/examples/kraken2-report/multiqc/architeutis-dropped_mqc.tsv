@@ -1,0 +1,9 @@
+# id: architeutis-dropped
+# section_name: Dropped samples
+# description: Samples removed before plotting because of read depth or a rarefaction curve that was still rising.
+# plot_type: table
+# pconfig:
+#   id: architeutis-dropped
+#   title: Dropped samples
+sample	reads	reason	detail
+none	0	none	No samples were removed by the configured QC checks.

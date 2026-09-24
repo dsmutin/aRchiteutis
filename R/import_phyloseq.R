@@ -1,0 +1,1005 @@
+# Classifier reports -> phyloseq (or a phyloseq-shaped list when phyloseq
+# is not installed). Lineage walking and host-taxon cleanup follow the
+# metagenomics harness bracken/kraken parsers.
+
+archi_rank_code <- function() {
+  c(D = "kingdom", K = "kingdom", P = "phylum", C = "class",
+    O = "order", F = "family", G = "genus", S = "species")
+}
+
+archi_canonical_rank_code <- function(rank) {
+  rank <- trimws(as.character(rank))
+  code <- toupper(rank)
+  full <- c(
+    domain = "D", superkingdom = "D", kingdom = "K",
+    phylum = "P", class = "C", order = "O", family = "F",
+    genus = "G", species = "S", root = "R", unclassified = "U"
+  )
+  out <- rep(NA_character_, length(rank))
+  exact_code <- code %in% c("U", "R", "D", "K", "P", "C", "O", "F", "G", "S")
+  out[exact_code] <- code[exact_code]
+  named <- tolower(rank) %in% names(full)
+  out[named] <- unname(full[tolower(rank[named])])
+  out
+}
+
+archi_host_name <- function(name) {
+  grepl("Chordata|Mitochondria|Chloroplast", name, ignore.case = TRUE)
+}
+
+#' Read one Kraken, Kraken2, KrakenUniq or Bracken file
+#'
+#' Kraken-style reports use six columns (percentage, clade reads, direct
+#' reads, rank, taxid, indented name). KrakenUniq adds k-mer columns before
+#' the taxid. Bracken genus tables have a header with `name` and
+#' `new_est_reads`.
+#'
+#' @param path File path.
+#' @param rank Rank code to keep for Kraken reports, usually `"G"` or `"S"`.
+#' @return A data frame with `sample`, `taxid`, `name`, `rank`, `reads`.
+#' @export
+read_classifier_report <- function(path, rank = "G") {
+  sample <- basename(path)
+  sample <- sub("\\.(txt|tsv|report|kreport|bracken)$", "", sample, ignore.case = TRUE)
+  lines <- readLines(path, warn = FALSE)
+  content <- lines[nzchar(lines) & !grepl("^#", lines)]
+  if (!length(content)) stop("Empty classifier report: ", path, call. = FALSE)
+  first <- content[[1]]
+  if (grepl("new_est_reads", first) || grepl("^name\t", first)) {
+    return(archi_read_bracken(path, sample))
+  }
+  fields <- strsplit(first, "\t", fixed = TRUE)[[1]]
+  has_header <- any(tolower(fields) %in% c("taxid", "taxonomy_id")) &&
+    any(tolower(fields) %in% c("rank", "taxonomy_lvl"))
+  df <- utils::read.table(
+    text = paste(content, collapse = "\n"), sep = "\t", quote = "", fill = TRUE,
+    comment.char = "", header = has_header, check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  if (ncol(df) < 6L) stop("Kraken-style report needs at least 6 columns: ", path, call. = FALSE)
+  if (has_header) {
+    low <- tolower(names(df))
+    id_col <- match(TRUE, low %in% c("taxid", "taxonomy_id"))
+    rank_col <- match(TRUE, low %in% c("rank", "taxonomy_lvl"))
+    name_col <- match(TRUE, low %in% c("taxname", "name", "taxonomy_name"))
+    reads_col <- match(TRUE, low %in% c("reads", "clade_reads", "new_est_reads"))
+    pct_col <- match(TRUE, low %in% c("%", "percentage", "percent"))
+  } else {
+    # Kraken/Kraken2: 6 columns. Kraken2 with minimizer data: 8 columns.
+    # KrakenUniq: 9 columns (% reads taxReads kmers dup cov taxID rank taxName).
+    if (ncol(df) >= 9L) {
+      id_col <- 7L
+      rank_col <- 8L
+      name_col <- 9L
+    } else {
+      rank_col <- ncol(df) - 2L
+      id_col <- ncol(df) - 1L
+      name_col <- ncol(df)
+    }
+    reads_col <- 2L
+    pct_col <- 1L
+  }
+  needed <- c(id_col, rank_col, name_col, reads_col)
+  if (anyNA(needed)) stop("Unrecognized classifier report columns: ", path, call. = FALSE)
+  raw_name <- as.character(df[[name_col]])
+  name <- trimws(raw_name)
+  out <- data.frame(
+    taxid = suppressWarnings(as.integer(df[[id_col]])),
+    rank_raw = as.character(df[[rank_col]]),
+    rank = archi_canonical_rank_code(df[[rank_col]]),
+    reads = suppressWarnings(as.numeric(df[[reads_col]])),
+    percentage = if (is.na(pct_col)) NA_real_ else suppressWarnings(as.numeric(df[[pct_col]])),
+    name = name,
+    depth = nchar(raw_name) - nchar(name),
+    stringsAsFactors = FALSE
+  )
+  total_rows <- out$rank %in% c("U", "R") |
+    tolower(out$name) %in% c("root", "unclassified")
+  total_reads <- sum(out$reads[total_rows], na.rm = TRUE)
+  if (!is.finite(total_reads) || total_reads <= 0) {
+    total_reads <- max(out$reads, na.rm = TRUE)
+  }
+  out <- out[!is.na(out$taxid) & out$taxid > 0L, , drop = FALSE]
+  result <- archi_lineage_from_kraken(out, sample = sample, rank = rank)
+  attr(result, "profile_reads") <- total_reads
+  result
+}
+
+archi_read_bracken <- function(path, sample) {
+  df <- utils::read.delim(path, check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+  if (!all(c("name", "new_est_reads", "taxonomy_id") %in% names(df))) {
+    stop("Bracken table needs name, new_est_reads, taxonomy_id: ", path, call. = FALSE)
+  }
+  rank <- if ("taxonomy_lvl" %in% names(df)) as.character(df$taxonomy_lvl) else "G"
+  out <- data.frame(
+    sample = sample,
+    taxid = as.integer(df$taxonomy_id),
+    name = as.character(df$name),
+    rank = sub("[0-9]+$", "", rank),
+    reads = as.numeric(df$new_est_reads),
+    kingdom = NA_character_, phylum = NA_character_, class = NA_character_,
+    order = NA_character_, family = NA_character_,
+    genus = ifelse(sub("[0-9]+$", "", rank) == "G", as.character(df$name), NA_character_),
+    species = ifelse(sub("[0-9]+$", "", rank) == "S", as.character(df$name), NA_character_),
+    stringsAsFactors = FALSE
+  )
+  attr(out, "profile_reads") <- sum(out$reads, na.rm = TRUE)
+  out
+}
+
+archi_lineage_from_kraken <- function(out, sample, rank) {
+  codes <- archi_rank_code()
+  ranks <- archi_rank_cols()
+  stack_depth <- integer(0)
+  stack_rank <- character(0)
+  stack_name <- character(0)
+  rows <- list()
+  k <- 0L
+  for (i in seq_len(nrow(out))) {
+    d <- out$depth[[i]]
+    while (length(stack_depth) && stack_depth[[length(stack_depth)]] >= d) {
+      n <- length(stack_depth)
+      stack_depth <- stack_depth[-n]
+      stack_rank <- stack_rank[-n]
+      stack_name <- stack_name[-n]
+    }
+    code <- out$rank[[i]]
+    if (!is.na(code) && code %in% names(codes)) {
+      stack_depth <- c(stack_depth, d)
+      stack_rank <- c(stack_rank, codes[[code]])
+      stack_name <- c(stack_name, out$name[[i]])
+    }
+    if (!is.na(code) && code %in% rank && out$reads[[i]] > 0) {
+      lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
+      if (length(stack_rank)) lin[stack_rank] <- stack_name
+      k <- k + 1L
+      rows[[k]] <- data.frame(
+        sample = sample, taxid = out$taxid[[i]], name = out$name[[i]],
+        rank = code, reads = out$reads[[i]],
+        as.list(lin), stringsAsFactors = FALSE
+      )
+    }
+  }
+  if (!length(rows)) {
+    stop("No rows at rank ", paste(rank, collapse = ","), " in ", sample, call. = FALSE)
+  }
+  do.call(rbind, rows)
+}
+
+archi_read_legend <- function(legend, trim_char = FALSE) {
+  if (isFALSE(legend) || is.null(legend)) return(NULL)
+  df <- if (is.character(legend) && length(legend) == 1L) {
+    archi_read_sample_metadata(legend)
+  } else {
+    as.data.frame(legend, stringsAsFactors = FALSE)
+  }
+  ids <- rownames(df)
+  if (is.null(ids) || identical(ids, as.character(seq_len(nrow(df))))) {
+    id_col <- intersect(c("sample-id", "sample_id", "sampleID", "SampleID", "sample"), names(df))
+    if (!length(id_col)) id_col <- names(df)[[1]]
+    ids <- as.character(df[[id_col[[1]]]])
+    df[[id_col[[1]]]] <- NULL
+  }
+  if (!isFALSE(trim_char)) {
+    ids <- vapply(strsplit(ids, trim_char, fixed = TRUE), function(z) z[[1]], character(1))
+  }
+  rownames(df) <- ids
+  df
+}
+
+archi_assemble_phyloseq <- function(long, legend = NULL, profile_reads = NULL) {
+  ranks <- archi_rank_cols()
+  host_text <- apply(long[, intersect(c("name", ranks), names(long)), drop = FALSE], 1, function(x) {
+    any(archi_host_name(as.character(x)))
+  })
+  long <- long[!host_text & !long$taxid %in% c(9606L, 9605L, 33208L), , drop = FALSE]
+  if (!nrow(long)) stop("No taxa left after host/organelle filtering", call. = FALSE)
+  long$taxa_id <- paste0("tax_", long$taxid)
+  samples <- unique(long$sample)
+  taxa <- unique(long$taxa_id)
+  counts <- matrix(0, nrow = length(taxa), ncol = length(samples),
+                   dimnames = list(taxa, samples))
+  for (i in seq_len(nrow(long))) {
+    counts[long$taxa_id[[i]], long$sample[[i]]] <-
+      counts[long$taxa_id[[i]], long$sample[[i]]] + long$reads[[i]]
+  }
+  counts <- counts[rowSums(counts) > 0, , drop = FALSE]
+  meta_taxa <- long[!duplicated(long$taxa_id), , drop = FALSE]
+  meta_taxa <- meta_taxa[match(rownames(counts), meta_taxa$taxa_id), , drop = FALSE]
+  tax <- meta_taxa[, ranks, drop = FALSE]
+  rownames(tax) <- meta_taxa$taxa_id
+  tree <- ranks_to_tree(data.frame(
+    tax, taxa_id = rownames(tax), taxid = meta_taxa$taxid,
+    tip_name = rownames(tax), stringsAsFactors = FALSE
+  ))
+  sam <- if (is.null(legend)) {
+    data.frame(sample = colnames(counts), row.names = colnames(counts), stringsAsFactors = FALSE)
+  } else {
+    legend <- legend[intersect(colnames(counts), rownames(legend)), , drop = FALSE]
+    if (!nrow(legend)) {
+      data.frame(sample = colnames(counts), row.names = colnames(counts), stringsAsFactors = FALSE)
+    } else {
+      missing <- setdiff(colnames(counts), rownames(legend))
+      if (length(missing)) {
+        extra <- as.data.frame(matrix(NA, nrow = length(missing), ncol = ncol(legend),
+                                      dimnames = list(missing, names(legend))))
+        legend <- rbind(legend, extra)
+      }
+      legend[colnames(counts), , drop = FALSE]
+    }
+  }
+  if (!is.null(profile_reads)) {
+    profile_reads <- profile_reads[colnames(counts)]
+    sam$profile_reads <- as.numeric(profile_reads)
+  }
+  archi_phyloseq_object(counts, as.matrix(tax), sam, tree)
+}
+
+archi_phyloseq_object <- function(counts, tax, sam, tree) {
+  if (requireNamespace("phyloseq", quietly = TRUE)) {
+    return(phyloseq::phyloseq(
+      phyloseq::otu_table(counts, taxa_are_rows = TRUE),
+      phyloseq::tax_table(tax),
+      phyloseq::sample_data(sam),
+      phyloseq::phy_tree(tree)
+    ))
+  }
+  structure(list(
+    otu_table = counts,
+    tax_table = tax,
+    sample_data = sam,
+    phy_tree = tree
+  ), class = "archi_phyloseq")
+}
+
+#' Import Kraken, Kraken2, KrakenUniq or Bracken reports as phyloseq
+#'
+#' @param path Directory of reports, or a character vector of files.
+#' @param pattern Regular expression selecting files when `path` is a directory.
+#' @param rank Rank code kept in the OTU table (`"G"` or `"S"`).
+#' @param legend Path to a CSV legend. A QIIME2 manifest (`sample-id`) or the
+#'   package legend (sample id in the first column) are both accepted.
+#' @param trim_char Passed through when matching legend ids to file names.
+#'   File names are trimmed the same way before they become sample ids.
+#' @return A `phyloseq` object, or an `archi_phyloseq` list with
+#'   `otu_table`, `tax_table`, `sample_data` and `phy_tree` when \pkg{phyloseq}
+#'   is not installed.
+#'
+#' @examples
+#' path <- system.file("extdata", package = "aRchiteutis")
+#' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+#' ps <- kraken_to_phyloseq(path, pattern = "m11_.*k2", legend = legend,
+#'                          trim_char = "_", rank = "G")
+#' if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
+#'
+#' @export
+kraken_to_phyloseq <- function(path, pattern = "", rank = "G",
+                              legend = NULL, trim_char = FALSE) {
+  files <- if (length(path) == 1L && dir.exists(path)) {
+    list.files(path, pattern = pattern, full.names = TRUE)
+  } else {
+    path
+  }
+  if (!length(files)) stop("No classifier reports matched", call. = FALSE)
+  records <- lapply(files, function(f) {
+    rec <- read_classifier_report(f, rank = rank)
+    if (!isFALSE(trim_char)) {
+      rec$sample <- strsplit(rec$sample, trim_char, fixed = TRUE)[[1]][[1]]
+    }
+    rec
+  })
+  profile_reads <- vapply(records, function(rec) {
+    val <- attr(rec, "profile_reads")
+    if (is.null(val)) sum(rec$reads) else as.numeric(val)
+  }, numeric(1))
+  names(profile_reads) <- vapply(records, function(rec) as.character(rec$sample[[1]]), character(1))
+  long <- do.call(rbind, records)
+  archi_assemble_phyloseq(
+    long, legend = archi_read_legend(legend, trim_char),
+    profile_reads = profile_reads
+  )
+}
+
+#' Import Kaiju output or a kaiju2table summary as phyloseq
+#'
+#' Accepts either a per-read `kaiju.out` (`C`/`U`, read name, taxid, optional
+#' lineage) or a `kaiju2table` summary (`file`, `percent`, `reads`,
+#' `taxon_id`, `taxon_name`). Several files are different samples. Lineage
+#' text separated by `"; "` fills rank columns; otherwise the taxon name is
+#' stored at genus or species and a rank tree is still attached.
+#'
+#' @param path Directory or character vector of Kaiju files.
+#' @param pattern File filter when `path` is a directory.
+#' @param legend Optional sample legend. See [kraken_to_phyloseq()].
+#' @param trim_char Trim file names to sample ids.
+#' @return A phyloseq object, or an `archi_phyloseq` list.
+#'
+#' @examples
+#' kaiju <- system.file("extdata", "kaiju-example.tsv", package = "aRchiteutis")
+#' ps <- kaiju_to_phyloseq(kaiju)
+#' if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
+#'
+#' @export
+kaiju_to_phyloseq <- function(path, pattern = "", legend = NULL, trim_char = FALSE) {
+  files <- if (length(path) == 1L && dir.exists(path)) {
+    list.files(path, pattern = pattern, full.names = TRUE)
+  } else {
+    path
+  }
+  if (!length(files)) stop("No Kaiju files matched", call. = FALSE)
+  records <- lapply(files, archi_read_kaiju_file)
+  profile_reads <- unlist(lapply(records, function(rec) attr(rec, "profile_reads")))
+  long <- do.call(rbind, records)
+  if (!isFALSE(trim_char)) {
+    long$sample <- vapply(strsplit(as.character(long$sample), trim_char, fixed = TRUE),
+                          function(z) z[[1]], character(1))
+    names(profile_reads) <- vapply(
+      strsplit(names(profile_reads), trim_char, fixed = TRUE),
+      function(z) z[[1]], character(1)
+    )
+  }
+  archi_assemble_phyloseq(
+    long, legend = archi_read_legend(legend, trim_char),
+    profile_reads = profile_reads
+  )
+}
+
+archi_read_kaiju_file <- function(path) {
+  header <- readLines(path, n = 1L, warn = FALSE)
+  sample <- sub("\\.(tsv|txt|out|csv)$", "", basename(path), ignore.case = TRUE)
+  if (grepl("taxon_id|taxon_name", header)) {
+    df <- utils::read.delim(path, check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+    name_col <- intersect(c("taxon_name", "taxon"), names(df))[[1]]
+    id_col <- intersect(c("taxon_id", "taxid"), names(df))[[1]]
+    groups <- if ("file" %in% names(df)) {
+      split(seq_len(nrow(df)), as.character(df$file))
+    } else {
+      stats::setNames(list(seq_len(nrow(df))), sample)
+    }
+    rows <- lapply(names(groups), function(file) {
+      idx <- groups[[file]]
+      id <- sub("\\.(tsv|txt|out|csv)$", "", basename(file), ignore.case = TRUE)
+      archi_kaiju_names_to_long(df[[id_col]][idx], df[[name_col]][idx], df$reads[idx], id)
+    })
+    out <- do.call(rbind, rows)
+    totals <- vapply(names(groups), function(file) {
+      idx <- groups[[file]]
+      if ("percent" %in% names(df)) {
+        est <- 100 * as.numeric(df$reads[idx]) / as.numeric(df$percent[idx])
+        est <- est[is.finite(est) & est > 0]
+        if (length(est)) return(stats::median(est))
+      }
+      sum(as.numeric(df$reads[idx]), na.rm = TRUE)
+    }, numeric(1))
+    names(totals) <- sub("\\.(tsv|txt|out|csv)$", "", basename(names(groups)), ignore.case = TRUE)
+    attr(out, "profile_reads") <- totals
+    return(out)
+  }
+  df <- utils::read.table(path, sep = "\t", quote = "", fill = TRUE,
+                          comment.char = "", stringsAsFactors = FALSE)
+  if (ncol(df) >= 4L && any(grepl(";", df[[4]]))) {
+    ok <- df[[1]] == "C"
+    out <- archi_kaiju_names_to_long(df[[3]][ok], df[[4]][ok], rep(1, sum(ok)), sample)
+    attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
+    return(out)
+  }
+  if (ncol(df) < 3L || !any(df[[1]] %in% c("C", "U"))) {
+    stop("Not a Kaiju summary or per-read file: ", path, call. = FALSE)
+  }
+  ok <- df[[1]] == "C"
+  out <- archi_kaiju_names_to_long(
+    df[[3]][ok], rep(NA_character_, sum(ok)), rep(1, sum(ok)), sample
+  )
+  if (!nrow(out)) stop("No classified Kaiju rows in ", path, call. = FALSE)
+  attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
+  out
+}
+
+archi_parse_kaiju_lineage <- function(name) {
+  ranks <- archi_rank_cols()
+  lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
+  if (is.na(name) || !nzchar(name)) return(lin)
+  bits <- trimws(strsplit(name, ";", fixed = TRUE)[[1]])
+  bits <- bits[nzchar(bits)]
+  if (!length(bits)) return(lin)
+  prefixed <- vapply(bits, function(bit) {
+    grepl("^[dkpcofgs]__", bit, ignore.case = TRUE)
+  }, logical(1))
+  if (any(prefixed)) {
+    return(archi_parse_qiime_taxon(paste(bits, collapse = ";")))
+  }
+  bits <- bits[!tolower(bits) %in% c("root", "cellular organisms")]
+  # Full NCBI paths can include unranked clades between canonical ranks.
+  unranked <- grepl(
+    "( group| clade| cluster| subgroup| incertae sedis)$",
+    bits, ignore.case = TRUE
+  )
+  bits <- bits[!unranked]
+  if (!length(bits)) return(lin)
+  kingdoms <- c("Bacteria", "Archaea", "Eukaryota", "Viruses")
+  if (bits[[1]] %in% kingdoms) {
+    lin[["kingdom"]] <- bits[[1]]
+    bits <- bits[-1]
+  }
+  if (!length(bits)) return(lin)
+  # A binomial, including "Candidatus Name epithet", is a species. The token
+  # before it is the genus. A bare "Candidatus Name" is a genus, not a species.
+  last <- bits[[length(bits)]]
+  species_like <- grepl(" ", last) &&
+    !grepl("^unclassified |^candidatus [^ ]+$", last, ignore.case = TRUE)
+  if (species_like) {
+    lin[["species"]] <- last
+    bits <- bits[-length(bits)]
+    if (length(bits)) {
+      lin[["genus"]] <- bits[[length(bits)]]
+      bits <- bits[-length(bits)]
+    } else {
+      lin[["genus"]] <- sub(" [^ ]+$", "", last)
+    }
+  } else {
+    lin[["genus"]] <- last
+    bits <- bits[-length(bits)]
+  }
+  middle <- c("phylum", "class", "order", "family")
+  if (length(bits)) {
+    if (length(bits) > length(middle)) bits <- utils::tail(bits, length(middle))
+    lin[utils::tail(middle, length(bits))] <- bits
+  }
+  lin
+}
+
+archi_kaiju_names_to_long <- function(taxid, name, reads, sample) {
+  taxid <- as.integer(taxid)
+  name <- as.character(name)
+  reads <- as.numeric(reads)
+  keep <- !is.na(taxid) & taxid > 0L & reads > 0
+  taxid <- taxid[keep]
+  name <- name[keep]
+  reads <- reads[keep]
+  # Aggregate per-read classifications.
+  key <- paste(taxid, name, sep = "\t")
+  agg <- rowsum(reads, key)
+  parts <- strsplit(rownames(agg), "\t", fixed = TRUE)
+  taxid <- as.integer(vapply(parts, `[[`, character(1), 1))
+  name <- vapply(parts, function(z) if (length(z) > 1) z[[2]] else NA_character_, character(1))
+  ranks <- archi_rank_cols()
+  if (!length(taxid)) {
+    empty <- data.frame(
+      sample = character(), taxid = integer(), name = character(),
+      rank = character(), reads = numeric(), stringsAsFactors = FALSE
+    )
+    for (rk in ranks) empty[[rk]] <- character()
+    return(empty)
+  }
+  rows <- lapply(seq_along(taxid), function(i) {
+    nm <- name[[i]]
+    lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
+    if (!is.na(nm) && grepl(";", nm)) {
+      lin <- archi_parse_kaiju_lineage(nm)
+    } else if (!is.na(nm) && nzchar(nm)) {
+      if (grepl(" ", nm)) lin[["species"]] <- nm else lin[["genus"]] <- nm
+    }
+    data.frame(sample = sample, taxid = taxid[[i]], name = if (is.na(nm) || !nzchar(nm)) paste0("tax_", taxid[[i]]) else nm,
+               rank = if (!is.na(lin[["species"]])) "S" else "G",
+               reads = agg[[i]], as.list(lin), stringsAsFactors = FALSE)
+  })
+  do.call(rbind, rows)
+}
+
+#' Import QIIME 2 feature table, taxonomy and tree artifacts as phyloseq
+#'
+#' `features` may be a feature-table `.qza` or a directory that contains one.
+#' Taxonomy and a rooted tree are optional `.qza` files. Metadata is a QIIME 2
+#' manifest (TSV or CSV): a `sample-id` / `SampleID` column, or the first
+#' column, plus any annotation columns such as `target`. When \pkg{qiime2R} is
+#' installed it is tried first. Otherwise a feature-table TSV inside the
+#' archive is read directly, and a BIOM table is read with \pkg{biomformat}.
+#' Chloroplast, mitochondria and Chordata features are dropped. A Newick tree
+#' is attached when its tips match the feature ids; otherwise a rank-formula
+#' tree is built from the taxonomy table.
+#'
+#' @param features Feature-table `.qza`, an exported feature-table TSV, or a
+#'   directory of artifacts. A vector merges several runs after checking that
+#'   sample ids do not overlap.
+#' @param taxonomy Taxonomy `.qza` or TSV. Discovered next to `features` when
+#'   that argument is a directory and this is `NULL`.
+#' @param metadata Sample metadata TSV/CSV, or a `.qza`. Same discovery rule.
+#' @param tree Rooted-tree `.qza` or Newick. Same discovery rule.
+#' @return A `phyloseq` object, or an `archi_phyloseq` list.
+#'
+#' @examples
+#' qza <- system.file("extdata", "qza", package = "aRchiteutis")
+#' if (requireNamespace("biomformat", quietly = TRUE)) {
+#'   ps <- qza_to_phyloseq(qza)
+#'   if (inherits(ps, "phyloseq")) phyloseq::nsamples(ps) else ncol(ps$otu_table)
+#' }
+#'
+#' @export
+qza_to_phyloseq <- function(features, taxonomy = NULL, metadata = NULL, tree = NULL) {
+  if (length(features) == 1L && dir.exists(features)) {
+    found <- archi_discover_qza(features)
+    if (is.null(taxonomy)) taxonomy <- found$taxonomy
+    if (is.null(metadata)) metadata <- found$metadata
+    if (is.null(tree)) tree <- found$tree
+    features <- found$features
+  }
+  if (is.null(features) || !length(features) || any(!nzchar(features))) {
+    stop("No feature table (.qza or TSV) found", call. = FALSE)
+  }
+  if (length(features) > 1L) {
+    taxonomy <- archi_recycle_artifacts(taxonomy, length(features), "taxonomy")
+    tree <- archi_recycle_artifacts(tree, length(features), "tree")
+    objects <- lapply(seq_along(features), function(i) {
+      archi_qza_single(
+        features[[i]], taxonomy[[i]], metadata,
+        tree[[i]]
+      )
+    })
+    return(archi_merge_phyloseq(objects))
+  }
+  if (length(taxonomy) > 1L || length(tree) > 1L) {
+    stop("A single feature table accepts at most one taxonomy and one tree", call. = FALSE)
+  }
+  archi_qza_single(features[[1]], taxonomy, metadata, tree)
+}
+
+archi_qza_single <- function(features, taxonomy = NULL, metadata = NULL, tree = NULL) {
+  if (requireNamespace("qiime2R", quietly = TRUE) && grepl("\\.qza$", features, ignore.case = TRUE)) {
+    args <- list(features = features)
+    if (!is.null(taxonomy)) args$taxonomy <- taxonomy
+    if (!is.null(metadata)) args$metadata <- metadata
+    if (!is.null(tree)) args$tree <- tree
+    ps <- tryCatch(do.call(qiime2R::qza_to_phyloseq, args), error = function(e) e)
+    if (!inherits(ps, "error")) return(archi_finish_qiime2r(ps))
+    message(
+      "qiime2R import failed; trying the archive payload directly: ",
+      conditionMessage(ps)
+    )
+  }
+  otu <- archi_read_feature_table(features)
+  tax <- if (is.null(taxonomy)) {
+    matrix(NA_character_, nrow = nrow(otu), ncol = length(archi_rank_cols()),
+           dimnames = list(rownames(otu), archi_rank_cols()))
+  } else {
+    archi_read_qiime_taxonomy(taxonomy, rownames(otu))
+  }
+  drop <- apply(tax, 1, function(row) {
+    any(grepl("Chloroplast|Mitochondria|Chordata", row, ignore.case = TRUE))
+  })
+  if (any(drop)) {
+    otu <- otu[!drop, , drop = FALSE]
+    tax <- tax[!drop, , drop = FALSE]
+  }
+  keep <- rowSums(otu) > 0
+  otu <- otu[keep, , drop = FALSE]
+  tax <- tax[keep, , drop = FALSE]
+  tax_df <- as.data.frame(tax, stringsAsFactors = FALSE)
+  rownames(tax_df) <- rownames(otu)
+  sam <- archi_align_metadata(otu, metadata)
+  sam$profile_reads <- colSums(otu)[rownames(sam)]
+  phy <- archi_read_newick(tree)
+  phy <- archi_align_tree(phy, rownames(otu))
+  if (is.null(phy)) {
+    phy <- ranks_to_tree(data.frame(
+      tax_df, taxa_id = rownames(tax_df), tip_name = rownames(tax_df),
+      stringsAsFactors = FALSE
+    ))
+  }
+  archi_phyloseq_object(otu, as.matrix(tax_df), sam, phy)
+}
+
+archi_recycle_artifacts <- function(x, n, what) {
+  if (is.null(x)) return(rep(list(NULL), n))
+  if (length(x) == 1L) return(rep(as.list(x), n))
+  if (length(x) != n) {
+    stop("`", what, "` must have length 1 or match `features` (", n, ")", call. = FALSE)
+  }
+  as.list(x)
+}
+
+archi_merge_phyloseq <- function(objects) {
+  unpacked <- lapply(objects, .unpack_phyloseq)
+  samples <- unlist(lapply(unpacked, function(x) colnames(x$otu)), use.names = FALSE)
+  if (anyDuplicated(samples)) {
+    stop("Cannot merge QIIME 2 tables with duplicate sample ids: ",
+         paste(unique(samples[duplicated(samples)]), collapse = ", "), call. = FALSE)
+  }
+  taxa <- unique(unlist(lapply(unpacked, function(x) rownames(x$otu)), use.names = FALSE))
+  otu <- matrix(0, nrow = length(taxa), ncol = length(samples),
+                dimnames = list(taxa, samples))
+  ranks <- archi_rank_cols()
+  tax <- matrix(NA_character_, nrow = length(taxa), ncol = length(ranks),
+                dimnames = list(taxa, ranks))
+  sample_frames <- vector("list", length(unpacked))
+  for (i in seq_along(unpacked)) {
+    item <- unpacked[[i]]
+    otu[rownames(item$otu), colnames(item$otu)] <- item$otu
+    if (!is.null(item$tax)) {
+      tt <- as.data.frame(item$tax, stringsAsFactors = FALSE)
+      names(tt) <- tolower(names(tt))
+      shared_ranks <- intersect(ranks, names(tt))
+      shared_taxa <- intersect(rownames(tt), taxa)
+      for (rk in shared_ranks) {
+        current <- tax[shared_taxa, rk]
+        incoming <- as.character(tt[shared_taxa, rk])
+        use <- (is.na(current) | !nzchar(current)) & !is.na(incoming) & nzchar(incoming)
+        tax[shared_taxa[use], rk] <- incoming[use]
+      }
+    }
+    sad <- item$sad
+    if (is.null(sad)) {
+      sad <- data.frame(sample = colnames(item$otu), row.names = colnames(item$otu))
+    }
+    sample_frames[[i]] <- as.data.frame(sad, stringsAsFactors = FALSE)
+  }
+  all_cols <- unique(unlist(lapply(sample_frames, names), use.names = FALSE))
+  sample_frames <- lapply(sample_frames, function(sad) {
+    for (col in setdiff(all_cols, names(sad))) sad[[col]] <- NA
+    sad[, all_cols, drop = FALSE]
+  })
+  sam <- do.call(rbind, sample_frames)
+  sam <- sam[samples, , drop = FALSE]
+  sam$profile_reads <- colSums(otu)[samples]
+  phy <- ranks_to_tree(data.frame(
+    as.data.frame(tax, stringsAsFactors = FALSE),
+    taxa_id = taxa, tip_name = taxa, stringsAsFactors = FALSE
+  ))
+  archi_phyloseq_object(otu, tax, sam, phy)
+}
+
+archi_discover_qza <- function(dir) {
+  files <- list.files(dir, full.names = TRUE)
+  bn <- basename(files)
+  pick_all <- function(pat) {
+    hit <- files[grepl(pat, bn, ignore.case = TRUE)]
+    if (length(hit)) sort(hit) else NULL
+  }
+  list(
+    features = pick_all("table.*\\.qza$|feature.*\\.qza$|feature-table.*\\.tsv$"),
+    taxonomy = pick_all("taxonom.*\\.(qza|tsv|txt)$"),
+    tree = pick_all("tree.*\\.(qza|nwk|tre|newick)$"),
+    metadata = {
+      hit <- pick_all("metadata.*\\.(tsv|csv|txt)$|manifest.*\\.(tsv|csv)$")
+      if (length(hit)) hit[[1]] else NULL
+    }
+  )
+}
+
+archi_qza_extract <- function(path) {
+  if (!grepl("\\.qza$", path, ignore.case = TRUE)) return(path)
+  hash <- unname(tools::md5sum(path))
+  dest <- file.path(tempdir(), paste0("archi-qza-", hash))
+  if (!dir.exists(dest)) utils::unzip(path, exdir = dest)
+  dest
+}
+
+archi_qza_data_file <- function(path, pattern) {
+  root <- archi_qza_extract(path)
+  if (!dir.exists(root)) {
+    if (grepl(pattern, basename(root), ignore.case = TRUE)) return(root)
+    stop("Cannot find data matching ", pattern, " in ", path, call. = FALSE)
+  }
+  files <- list.files(root, recursive = TRUE, full.names = TRUE)
+  # Prefer the artifact payload over provenance copies.
+  data <- files[grepl("/data/", files, fixed = TRUE) & grepl(pattern, basename(files), ignore.case = TRUE)]
+  if (!length(data)) data <- files[grepl(pattern, basename(files), ignore.case = TRUE)]
+  if (!length(data)) stop("No file matching ", pattern, " inside ", path, call. = FALSE)
+  data[[1]]
+}
+
+archi_read_feature_table <- function(path) {
+  if (dir.exists(path)) {
+    path <- archi_discover_qza(path)$features
+    if (is.null(path)) stop("No feature table in directory", call. = FALSE)
+  }
+  if (grepl("\\.qza$", path, ignore.case = TRUE)) {
+    biom <- tryCatch(
+      archi_qza_data_file(path, "feature-table\\.biom$|\\.biom$"),
+      error = function(e) NULL
+    )
+    tsv <- tryCatch(
+      archi_qza_data_file(path, "feature-table\\.tsv$|\\.tsv$"),
+      error = function(e) NULL
+    )
+    if (!is.null(biom)) return(archi_read_biom(biom))
+    if (!is.null(tsv)) return(archi_read_feature_tsv(tsv))
+    stop("Feature table .qza has neither BIOM nor TSV data: ", path, call. = FALSE)
+  }
+  if (grepl("\\.biom$", path, ignore.case = TRUE)) return(archi_read_biom(path))
+  archi_read_feature_tsv(path)
+}
+
+archi_read_biom <- function(path) {
+  if (!requireNamespace("biomformat", quietly = TRUE)) {
+    stop("Reading a BIOM feature table needs the biomformat package", call. = FALSE)
+  }
+  mat <- as.matrix(biomformat::biom_data(suppressWarnings(biomformat::read_biom(path))))
+  storage.mode(mat) <- "double"
+  mat[is.na(mat)] <- 0
+  mat
+}
+
+archi_read_feature_tsv <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  header <- grep("^#(OTU|Feature) ID", lines, ignore.case = TRUE)
+  if (length(header)) {
+    lines[[header[[length(header)]]]] <- sub("^#", "", lines[[header[[length(header)]]]])
+  }
+  lines <- lines[!grepl("^#", lines) & nzchar(lines)]
+  sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+  quote <- if (identical(sep, ",")) "\"" else ""
+  df <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
+                          check.names = FALSE, stringsAsFactors = FALSE, quote = quote)
+  ids <- as.character(df[[1]])
+  df[[1]] <- NULL
+  mat <- as.matrix(data.frame(lapply(df, as.numeric), check.names = FALSE, row.names = ids))
+  storage.mode(mat) <- "double"
+  mat[is.na(mat)] <- 0
+  mat
+}
+
+archi_read_qiime_taxonomy <- function(path, taxa_ids) {
+  if (grepl("\\.qza$", path, ignore.case = TRUE)) {
+    path <- archi_qza_data_file(path, "taxonomy\\.tsv$|taxonomy\\.txt$")
+  }
+  df <- utils::read.delim(path, check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+  id_col <- intersect(c("Feature ID", "FeatureID", "OTU", "#OTU ID", "ASV"), names(df))
+  tax_col <- intersect(c("Taxon", "taxonomy"), names(df))
+  ranks <- archi_rank_cols()
+  if (length(id_col) && length(tax_col)) {
+    parsed <- lapply(df[[tax_col[[1]]]], archi_parse_qiime_taxon)
+    tax <- do.call(rbind, parsed)
+    rownames(tax) <- as.character(df[[id_col[[1]]]])
+  } else if (all(ranks %in% tolower(names(df)))) {
+    names(df) <- tolower(names(df))
+    tax <- as.matrix(df[, ranks, drop = FALSE])
+    id_col <- setdiff(names(df), ranks)[[1]]
+    rownames(tax) <- as.character(df[[id_col]])
+  } else {
+    stop("Unrecognized taxonomy table: ", path, call. = FALSE)
+  }
+  missing <- setdiff(taxa_ids, rownames(tax))
+  if (length(missing)) {
+    fill <- matrix(NA_character_, nrow = length(missing), ncol = ncol(tax),
+                   dimnames = list(missing, colnames(tax)))
+    tax <- rbind(tax, fill)
+  }
+  tax[taxa_ids, , drop = FALSE]
+}
+
+archi_parse_qiime_taxon <- function(taxon) {
+  ranks <- archi_rank_cols()
+  out <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
+  parts <- trimws(strsplit(as.character(taxon), ";", fixed = TRUE)[[1]])
+  parts <- parts[nzchar(parts)]
+  map <- c(d = "kingdom", k = "kingdom", p = "phylum", c = "class",
+           o = "order", f = "family", g = "genus", s = "species")
+  prefixed <- FALSE
+  for (part in parts) {
+    m <- regmatches(part, regexec("^([dkpcofgs])__(.*)$", part, perl = TRUE))[[1]]
+    if (length(m) >= 3) {
+      prefixed <- TRUE
+      val <- trimws(m[[3]])
+      if (nzchar(val)) out[[map[[m[[2]]]]]] <- val
+    }
+  }
+  if (!prefixed && length(parts)) {
+    use <- utils::tail(parts, length(ranks))
+    out[seq.int(length(ranks) - length(use) + 1L, length(ranks))] <- use
+  }
+  out
+}
+
+archi_read_sample_metadata <- function(path) {
+  if (grepl("\\.qza$", path, ignore.case = TRUE)) {
+    path <- archi_qza_data_file(path, "metadata.*\\.(tsv|csv|txt)$|sample.*\\.(tsv|csv|txt)$")
+  }
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[!grepl("^#q2:types", lines, ignore.case = TRUE)]
+  lines <- lines[nzchar(lines)]
+  if (grepl("^#", lines[[1]])) lines[[1]] <- sub("^#+", "", lines[[1]])
+  sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+  quote <- if (identical(sep, ",")) "\"" else ""
+  df <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
+                          check.names = FALSE, stringsAsFactors = FALSE, quote = quote)
+  id_col <- intersect(c("sample-id", "sample_id", "sampleID", "SampleID", "sample", "SampleID"), names(df))
+  if (!length(id_col)) id_col <- names(df)[[1]]
+  ids <- as.character(df[[id_col[[1]]]])
+  df[[id_col[[1]]]] <- NULL
+  rownames(df) <- ids
+  df
+}
+
+archi_align_metadata <- function(otu, metadata) {
+  if (is.null(metadata)) {
+    return(data.frame(sample = colnames(otu), row.names = colnames(otu), stringsAsFactors = FALSE))
+  }
+  legend <- archi_read_sample_metadata(metadata)
+  legend <- legend[intersect(colnames(otu), rownames(legend)), , drop = FALSE]
+  missing <- setdiff(colnames(otu), rownames(legend))
+  if (length(missing) && ncol(legend)) {
+    extra <- as.data.frame(matrix(NA, nrow = length(missing), ncol = ncol(legend),
+                                  dimnames = list(missing, names(legend))),
+                           stringsAsFactors = FALSE)
+    legend <- rbind(legend, extra)
+  }
+  if (!nrow(legend)) {
+    return(data.frame(sample = colnames(otu), row.names = colnames(otu), stringsAsFactors = FALSE))
+  }
+  legend[colnames(otu), , drop = FALSE]
+}
+
+archi_read_newick <- function(tree) {
+  if (is.null(tree)) return(NULL)
+  if (inherits(tree, "phylo")) return(tree)
+  path <- tree
+  if (grepl("\\.qza$", path, ignore.case = TRUE)) {
+    path <- archi_qza_data_file(path, "\\.nwk$|\\.tre$|\\.newick$|tree\\.txt$")
+  }
+  ape::read.tree(path)
+}
+
+archi_align_tree <- function(tree, ids) {
+  if (is.null(tree)) return(NULL)
+  extra <- setdiff(tree$tip.label, ids)
+  if (length(extra)) tree <- ape::drop.tip(tree, extra)
+  if (!setequal(tree$tip.label, ids)) return(NULL)
+  tree
+}
+
+archi_standard_tax <- function(tax) {
+  tax <- as.matrix(tax)
+  ranks <- archi_rank_cols()
+  nm <- tolower(colnames(tax))
+  if (is.null(nm)) nm <- character(ncol(tax))
+  aliases <- c(
+    kingdom = "kingdom", domain = "kingdom", superkingdom = "kingdom",
+    phylum = "phylum", class = "class", order = "order", family = "family",
+    genus = "genus", species = "species",
+    rank1 = "kingdom", rank2 = "phylum", rank3 = "class", rank4 = "order",
+    rank5 = "family", rank6 = "genus", rank7 = "species"
+  )
+  mapped <- unname(aliases[nm])
+  if (any(!is.na(mapped))) {
+    out <- matrix(NA_character_, nrow(tax), length(ranks),
+                  dimnames = list(rownames(tax), ranks))
+    for (i in which(!is.na(mapped))) {
+      out[, mapped[[i]]] <- as.character(tax[, i])
+    }
+    return(out)
+  }
+  text_col <- which(nm %in% c("taxon", "taxonomy", "tax"))
+  if (length(text_col)) {
+    parsed <- lapply(as.character(tax[, text_col[[1]]]), archi_parse_qiime_taxon)
+    out <- do.call(rbind, parsed)
+    rownames(out) <- rownames(tax)
+    return(as.matrix(out))
+  }
+  colnames(tax) <- nm
+  tax
+}
+
+archi_finish_qiime2r <- function(ps) {
+  if (!requireNamespace("phyloseq", quietly = TRUE)) return(ps)
+  otu <- methods::as(phyloseq::otu_table(ps), "matrix")
+  if (!phyloseq::taxa_are_rows(ps)) otu <- t(otu)
+  tax <- tryCatch(as.matrix(phyloseq::tax_table(ps)), error = function(e) NULL)
+  if (!is.null(tax)) {
+    tax <- archi_standard_tax(tax)
+    phyloseq::tax_table(ps) <- phyloseq::tax_table(tax)
+    drop <- apply(tax, 1, function(row) {
+      any(grepl("Chloroplast|Mitochondria|Chordata", row, ignore.case = TRUE))
+    })
+    if (any(drop)) {
+      ps <- phyloseq::prune_taxa(!drop, ps)
+      otu <- otu[!drop, , drop = FALSE]
+      tax <- tax[!drop, , drop = FALSE]
+    }
+  }
+  tr <- tryCatch(phyloseq::phy_tree(ps), error = function(e) NULL)
+  aligned <- archi_align_tree(tr, rownames(otu))
+  if (is.null(aligned) && !is.null(tax)) {
+    tax_df <- as.data.frame(tax, stringsAsFactors = FALSE)
+    names(tax_df) <- tolower(names(tax_df))
+    for (rk in setdiff(archi_rank_cols(), names(tax_df))) tax_df[[rk]] <- NA_character_
+    tax_df <- fill_na_last_classified(tax_df[, archi_rank_cols(), drop = FALSE])
+    rownames(tax_df) <- rownames(otu)
+    phy <- ranks_to_tree(data.frame(
+      tax_df, taxa_id = rownames(tax_df), tip_name = rownames(tax_df),
+      stringsAsFactors = FALSE
+    ))
+    phyloseq::phy_tree(ps) <- phyloseq::phy_tree(phy)
+  }
+  ps
+}
+
+#' Import an abundance table keyed by NCBI taxid as phyloseq
+#'
+#' Rows are taxids (row names, or a `taxid` / `taxonomy_id` / `taxon_id`
+#' column). Other columns are samples. Lineages come from
+#' [taxids_to_lineage()]; pass `xml` to stay offline. A rank-formula tree is
+#' attached. Host and organelle taxids are dropped.
+#'
+#' @param counts Matrix, data frame, or path to a TSV/CSV.
+#' @param metadata Optional sample legend. QIIME 2 `sample-id` or a first-column
+#'   sample id, plus a `target` column when you have one.
+#' @param xml Optional NCBI taxonomy XML. `NULL` fetches lineages from NCBI.
+#' @param trim_char Split legend sample ids on this character before matching
+#'   them to column names.
+#' @return A `phyloseq` object, or an `archi_phyloseq` list.
+#'
+#' @examples
+#' counts <- system.file("extdata", "abundance-taxid-bee.tsv", package = "aRchiteutis")
+#' xml <- paste(readLines(system.file("extdata", "ncbi_taxonomy.xml",
+#'                                    package = "aRchiteutis"), warn = FALSE),
+#'              collapse = "\n")
+#' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+#' ps <- abundance_taxid_to_phyloseq(counts, metadata = legend, xml = xml,
+#'                                   trim_char = "_")
+#' if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
+#'
+#' @export
+abundance_taxid_to_phyloseq <- function(counts, metadata = NULL, xml = NULL,
+                                       trim_char = FALSE) {
+  parsed <- archi_read_abundance_taxid(counts)
+  lin <- taxids_to_lineage(parsed$taxids, xml = xml)
+  if (any(is.na(lin$taxid))) {
+    missing <- parsed$taxids[is.na(lin$taxid)]
+    stop("No lineage for taxid(s): ", paste(missing, collapse = ", "), call. = FALSE)
+  }
+  ranks <- archi_rank_cols()
+  cells <- which(is.finite(parsed$counts) & parsed$counts > 0, arr.ind = TRUE)
+  if (!nrow(cells)) stop("Abundance table has no positive counts", call. = FALSE)
+  tips <- as.character(lin$tip_name[cells[, 1]])
+  tips[is.na(tips) | !nzchar(tips)] <- paste0("tax_", parsed$taxids[cells[, 1]])[
+    is.na(tips) | !nzchar(tips)
+  ]
+  rank_map <- c(domain = "D", superkingdom = "D", kingdom = "K", phylum = "P",
+                class = "C", order = "O", family = "F", genus = "G", species = "S")
+  rank <- unname(rank_map[as.character(lin$tip_rank[cells[, 1]])])
+  rank[is.na(rank)] <- "S"
+  long <- data.frame(
+    sample = colnames(parsed$counts)[cells[, 2]],
+    taxid = parsed$taxids[cells[, 1]],
+    name = tips,
+    rank = rank,
+    reads = parsed$counts[cells],
+    lin[cells[, 1], ranks, drop = FALSE],
+    stringsAsFactors = FALSE
+  )
+  legend <- NULL
+  if (!is.null(metadata)) {
+    legend <- archi_read_legend(metadata, trim_char)
+  }
+  archi_assemble_phyloseq(
+    long, legend = legend,
+    profile_reads = colSums(parsed$counts)
+  )
+}
+
+archi_read_abundance_taxid <- function(counts) {
+  if (is.character(counts) && length(counts) == 1L) {
+    lines <- readLines(counts, warn = FALSE)
+    sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+    counts <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
+                                check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+  }
+  if (is.data.frame(counts)) {
+    id_col <- intersect(c("taxid", "taxonomy_id", "taxon_id", "TaxID", "tax_id"), names(counts))
+    if (length(id_col)) {
+      ids <- counts[[id_col[[1]]]]
+      counts[[id_col[[1]]]] <- NULL
+    } else {
+      ids <- rownames(counts)
+    }
+    num <- vapply(counts, function(col) is.numeric(col) || !any(grepl("[A-Za-z]", col)), logical(1))
+    counts <- as.matrix(data.frame(lapply(counts[num], as.numeric), check.names = FALSE))
+    rownames(counts) <- as.character(ids)
+  } else {
+    counts <- as.matrix(counts)
+  }
+  storage.mode(counts) <- "double"
+  taxids <- as.integer(rownames(counts))
+  if (anyNA(taxids)) stop("Abundance row names must be NCBI taxids", call. = FALSE)
+  list(counts = counts, taxids = taxids)
+}

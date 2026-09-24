@@ -74,13 +74,15 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/donut.png" alt="Donut of mean composition" width="720">
 
-`df2composition()` — stacked bars per sample.
+`df2composition()` — stacked bars per sample. Samples are ordered by the first principal component (`order_samples = "fpc"`). `hclust`, `abundance`, `alpha` and `none` are the other orders.
 
 <img src="img/composition.png" alt="Stacked composition bars" width="720">
 
-`df2barplot()` — amount per taxon.
+`df2barplot()` — amount per taxon. The default geometry is a box plot; `style = "raincloud"` draws a ggviolinbox raincloud.
 
 <img src="img/barplot.png" alt="Box plot of taxon amounts" width="720">
+
+<img src="img/barplot_raincloud.png" alt="Raincloud of taxon amounts" width="720">
 
 ### Diversity
 
@@ -88,13 +90,35 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/alpha.png" alt="Alpha-diversity summary" width="720">
 
-`df2beta()` — Bray–Curtis distances between samples. Point colour is brood stage.
+`df2alpha()` — Shannon and Simpson. `style = "raincloud"` uses the same raincloud geometry.
+
+<img src="img/alpha_raincloud.png" alt="Raincloud of Shannon and Simpson" width="720">
+
+`df2rarefaction()` — observed richness, Shannon and Simpson against sequencing depth. One thin line per sample, a smooth by group.
+
+<img src="img/rarefaction.png" alt="Alpha rarefaction curves" width="720">
+
+`df2beta()` — Bray–Curtis distances between samples. Point colour is brood stage. `method` accepts any name from `archi_beta_methods()`, including `"aitchison"`.
 
 <img src="img/beta.png" alt="Beta-diversity heatmap" width="720">
 
 `df2beta_pcoa()` — PCoA of that distance, with group ellipses.
 
 <img src="img/beta_pca.png" alt="Beta-diversity PCoA" width="720">
+
+### Taxonomy
+
+`df2heattree()` — rank tree sized and coloured by mean abundance.
+
+<img src="img/heattree.png" alt="Taxonomic heat tree" width="720">
+
+`df2difftree()` — log2 fold change between two groups on that tree. With more than two groups, pass `contrast`.
+
+<img src="img/difftree.png" alt="Differential abundance tree" width="720">
+
+`df2upset()` — taxon presence intersections across groups.
+
+<img src="img/upset.png" alt="UpSet of taxon presence" width="720">
 
 ### Clustering and correlation
 

@@ -43,7 +43,7 @@ archi_rarefaction_depths <- function(totals) {
   grid <- unique(as.integer(c(
     1L, 5L, 10L, 20L, 50L, 100L,
     if (max_sum >= 200L) seq(200L, min(2000L, max_sum), by = 200L) else integer(0),
-    if (max_sum > 2000L) seq(2500L, max_sum, by = 500L) else integer(0),
+    if (max_sum >= 2500L) seq(2500L, max_sum, by = 500L) else integer(0),
     max_sum
   )))
   grid[grid > 0L & grid <= max_sum]

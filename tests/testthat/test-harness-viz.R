@@ -8,6 +8,9 @@ test_that("rarefaction returns a curve and a replicate table", {
   expect_true(all(long$Depth %in% c(15L, 40L)))
   expect_true(all(is.finite(long$value)))
   expect_equal(max(archi_rarefaction_depths(c(120L, 350L))), 120L)
+  mid <- archi_rarefaction_depths(c(2200L, 9000L))
+  expect_equal(max(mid), 2200L)
+  expect_true(all(mid <= 2200L))
 })
 
 test_that("differential tree uses a rank formula, not a binary hclust", {

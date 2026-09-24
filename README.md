@@ -14,6 +14,36 @@ remotes::install_github("dsmutin/aRchiteutis")
 library(aRchiteutis)
 ```
 
+## Report
+
+`archi_report()` reads a directory of Kraken, Kaiju or QIIME 2 profiles (or a taxid abundance table), builds a phyloseq object with a taxonomy tree, and drops samples that fall below a read floor or whose rarefaction curve is still rising. Each requested plot is written with a one-line method caption. The HTML and the MultiQC section both end by stating that this is a preliminary report, not a final analysis.
+
+```r
+path   <- system.file("extdata", package = "aRchiteutis")
+legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+archi_report(
+  path, legend, outdir = "report",
+  pattern = "_k2\\.txt$", trim_char = "_", target = "stage",
+  plots = c("composition", "donut", "alpha", "beta", "rarefaction")
+)
+```
+
+`source` is `"auto"`, `"kraken"`, `"kaiju"`, `"qza"` or `"abundance"`. `plots` may also include `barplot`, `heattree`, `upset` and `difftree`. `beta_method` is any name from `archi_beta_methods()`.
+
+## Skills
+
+Agent skills in [`skills/`](skills/) only call package functions. Start with [`skills/aRchiteutis/SKILL.md`](skills/aRchiteutis/SKILL.md).
+
+| Step | Skills |
+| --- | --- |
+| Load a tidy table | `aRchiteutis-load-kraken`, `aRchiteutis-load-abundance`, `aRchiteutis-load-phyloseq`, `aRchiteutis-load-python` |
+| Import to phyloseq | `aRchiteutis-import-kraken`, `aRchiteutis-import-kaiju`, `aRchiteutis-import-qza`, `aRchiteutis-import-abundance`, `aRchiteutis-taxonomy-tree` |
+| Trim and reshape | `aRchiteutis-transform` |
+| Plot | `aRchiteutis-plot-composition`, `aRchiteutis-plot-diversity`, `aRchiteutis-plot-rarefaction`, `aRchiteutis-plot-difftree`, `aRchiteutis-plot-heattree`, `aRchiteutis-plot-ordination` |
+| Preliminary report | `aRchiteutis-report` |
+
+The same files are mirrored under `.cursor/skills/` for the editor.
+
 ## Load data
 
 Kraken2 reports (example files ship in the package):

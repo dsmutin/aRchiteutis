@@ -30,6 +30,8 @@ archi_report(
 
 `source` is `"auto"`, `"kraken"`, `"kaiju"`, `"qza"` or `"abundance"`. `plots` may also include `barplot`, `heattree`, `upset` and `difftree`. `beta_method` is any name from `archi_beta_methods()`.
 
+A rendered PDF of that report on the bundled Kraken2 profiles is [`examples/kraken2-report.pdf`](examples/kraken2-report.pdf).
+
 ## Skills
 
 Agent skills in [`skills/`](skills/) only call package functions. Start with [`skills/aRchiteutis/SKILL.md`](skills/aRchiteutis/SKILL.md).

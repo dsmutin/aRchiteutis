@@ -537,8 +537,7 @@ df2upset <- function(df, group, min_size = 1L) {
 #' @importFrom rlang .data
 df2heattree <- function(df, tax = NULL, top = 20L) {
   if (!is.null(tax) && requireNamespace("metacoder", quietly = TRUE)) {
-    drawn <- tryCatch(archi_heattree_metacoder(df, tax), error = function(e) e)
-    if (!inherits(drawn, "error")) return(drawn)
+    return(archi_heattree_metacoder(df, tax))
   }
   if (is.null(df)) stop("df2heattree needs a tidy table or metacoder ranks", call. = FALSE)
   df <- df_tidy_drop_unclassified(df)

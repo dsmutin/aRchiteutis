@@ -521,8 +521,12 @@ archi_qza_single <- function(features, taxonomy = NULL, metadata = NULL, tree = 
     if (!is.null(taxonomy)) args$taxonomy <- taxonomy
     if (!is.null(metadata)) args$metadata <- metadata
     if (!is.null(tree)) args$tree <- tree
-    ps <- tryCatch(do.call(qiime2R::qza_to_phyloseq, args), error = function(e) NULL)
-    if (!is.null(ps)) return(archi_finish_qiime2r(ps))
+    ps <- tryCatch(do.call(qiime2R::qza_to_phyloseq, args), error = function(e) e)
+    if (!inherits(ps, "error")) return(archi_finish_qiime2r(ps))
+    message(
+      "qiime2R import failed; trying the archive payload directly: ",
+      conditionMessage(ps)
+    )
   }
   otu <- archi_read_feature_table(features)
   tax <- if (is.null(taxonomy)) {

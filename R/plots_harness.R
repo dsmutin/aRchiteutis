@@ -486,13 +486,17 @@ df2upset <- function(df, group, min_size = 1L) {
   long <- tidyr::pivot_longer(long, cols = dplyr::all_of(sets),
                               names_to = "set", values_to = "in_set")
   long <- long[long$in_set == 1L, , drop = FALSE]
+  # One column per group, to the right of the intersection bars.
+  gap <- max(tab$size) * 0.08
+  long$x <- max(tab$size) * 1.15 + (match(long$set, sets) - 1L) * gap
   ggplot2::ggplot(tab, ggplot2::aes(x = .data$size, y = .data$combo)) +
     ggplot2::geom_col(fill = "grey25", width = 0.7) +
     ggplot2::geom_point(
       data = long,
-      ggplot2::aes(x = max(tab$size) * 1.08, y = .data$combo, colour = .data$set),
+      ggplot2::aes(x = .data$x, y = .data$combo, colour = .data$set),
       size = 2.4, inherit.aes = FALSE
     ) +
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +
     ggplot2::scale_colour_manual(
       values = stats::setNames(viridis::viridis(length(sets)), sets),
       name = NULL

@@ -587,15 +587,44 @@ archi_heattree_metacoder <- function(df, tax) {
     names(tax)
   )
   if (length(rank_cols) < 2L) stop("tax needs at least two rank columns", call. = FALSE)
-  obj <- metacoder::parse_tax_data(
-    tax, class_cols = rank_cols, named_by_rank = TRUE, include_tax_data = FALSE
-  )
+  input <- tax[, rank_cols, drop = FALSE]
+  sample_cols <- character()
   if (!is.null(df)) {
     mat <- df_untidy(df, amount_from = "N", drop_unclassified = TRUE)
-    obj$data$otu_table <- mat
-    obj$data$taxon_counts <- metacoder::calc_taxon_abund(obj, data = "otu_table", cols = colnames(mat))
+    idx <- match(tax$taxa, rownames(mat))
+    abund <- matrix(
+      0, nrow = nrow(tax), ncol = ncol(mat),
+      dimnames = list(NULL, colnames(mat))
+    )
+    matched <- !is.na(idx)
+    abund[matched, ] <- mat[idx[matched], , drop = FALSE]
+    input <- cbind(input, as.data.frame(abund, check.names = FALSE))
+    sample_cols <- colnames(mat)
   }
-  # heat_tree evaluates these names inside the Taxmap object.
+  obj <- metacoder::parse_tax_data(
+    input, class_cols = rank_cols, named_by_rank = TRUE
+  )
+  if (length(sample_cols)) {
+    obj$data$taxon_counts <- metacoder::calc_taxon_abund(
+      obj, data = "tax_data", cols = sample_cols
+    )
+    obj$data$taxon_counts$total <- rowSums(
+      obj$data$taxon_counts[, setdiff(names(obj$data$taxon_counts), "taxon_id"),
+                            drop = FALSE]
+    )
+    return(rlang::inject(metacoder::heat_tree(
+      obj,
+      node_label = !!quote(taxon_names),
+      node_size = !!quote(total),
+      node_color = !!quote(total),
+      node_color_axis_label = "Total reads",
+      node_size_axis_label = "Total reads",
+      layout = "davidson-harel",
+      initial_layout = "reingold-tilford"
+    )))
+  }
+  # heat_tree evaluates these names inside the Taxmap object. Without an
+  # abundance table, n_obs is the number of input taxa under each node.
   rlang::inject(metacoder::heat_tree(
     obj,
     node_label = !!quote(taxon_names),

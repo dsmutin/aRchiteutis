@@ -39,3 +39,18 @@ test_that("heat tree and upset plots build on the bundled reports", {
   expect_builds(df2heattree(g, top = 10))
   expect_builds(df2upset(g, group = "stage", min_size = 1))
 })
+
+test_that("metacoder heat tree receives a taxon_id abundance table", {
+  skip_if_not_installed("metacoder")
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  taxa <- unique(as.character(g$taxa))[seq_len(5)]
+  tax <- data.frame(
+    taxa = taxa,
+    kingdom = "Bacteria",
+    phylum = "Bacillota",
+    genus = taxa,
+    stringsAsFactors = FALSE
+  )
+  expect_no_error(df2heattree(g[g$taxa %in% taxa, ], tax = tax))
+})

@@ -266,7 +266,7 @@ archi_mqc_table <- function(path, dropped) {
     "#   id: architeutis-dropped",
     "#   title: Dropped samples"
   )
-  table_lines <- capture.output(utils::write.table(
+  table_lines <- utils::capture.output(utils::write.table(
     data, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE
   ))
   writeLines(c(header, table_lines), path)

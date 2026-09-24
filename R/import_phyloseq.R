@@ -315,7 +315,7 @@ kraken_to_phyloseq <- function(path, pattern = "", rank = "G",
 #' @return A phyloseq object, or an `archi_phyloseq` list.
 #'
 #' @examples
-#' kaiju <- system.file("extdata", "kaiju-summary-bee.tsv", package = "aRchiteutis")
+#' kaiju <- system.file("extdata", "kaiju-example.tsv", package = "aRchiteutis")
 #' ps <- kaiju_to_phyloseq(kaiju)
 #' if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
 #'
@@ -327,12 +327,21 @@ kaiju_to_phyloseq <- function(path, pattern = "", legend = NULL, trim_char = FAL
     path
   }
   if (!length(files)) stop("No Kaiju files matched", call. = FALSE)
-  long <- do.call(rbind, lapply(files, archi_read_kaiju_file))
+  records <- lapply(files, archi_read_kaiju_file)
+  profile_reads <- unlist(lapply(records, function(rec) attr(rec, "profile_reads")))
+  long <- do.call(rbind, records)
   if (!isFALSE(trim_char)) {
     long$sample <- vapply(strsplit(as.character(long$sample), trim_char, fixed = TRUE),
                           function(z) z[[1]], character(1))
+    names(profile_reads) <- vapply(
+      strsplit(names(profile_reads), trim_char, fixed = TRUE),
+      function(z) z[[1]], character(1)
+    )
   }
-  archi_assemble_phyloseq(long, legend = archi_read_legend(legend, trim_char))
+  archi_assemble_phyloseq(
+    long, legend = archi_read_legend(legend, trim_char),
+    profile_reads = profile_reads
+  )
 }
 
 archi_read_kaiju_file <- function(path) {
@@ -342,17 +351,81 @@ archi_read_kaiju_file <- function(path) {
     df <- utils::read.delim(path, check.names = FALSE, stringsAsFactors = FALSE, quote = "")
     name_col <- intersect(c("taxon_name", "taxon"), names(df))[[1]]
     id_col <- intersect(c("taxon_id", "taxid"), names(df))[[1]]
-    if ("file" %in% names(df)) sample <- sub("\\.(tsv|txt|out)$", "", df$file[[1]])
-    return(archi_kaiju_names_to_long(df[[id_col]], df[[name_col]], df$reads, sample))
+    groups <- if ("file" %in% names(df)) {
+      split(seq_len(nrow(df)), as.character(df$file))
+    } else {
+      stats::setNames(list(seq_len(nrow(df))), sample)
+    }
+    rows <- lapply(names(groups), function(file) {
+      idx <- groups[[file]]
+      id <- sub("\\.(tsv|txt|out|csv)$", "", basename(file), ignore.case = TRUE)
+      archi_kaiju_names_to_long(df[[id_col]][idx], df[[name_col]][idx], df$reads[idx], id)
+    })
+    out <- do.call(rbind, rows)
+    totals <- vapply(names(groups), function(file) {
+      idx <- groups[[file]]
+      if ("percent" %in% names(df)) {
+        est <- 100 * as.numeric(df$reads[idx]) / as.numeric(df$percent[idx])
+        est <- est[is.finite(est) & est > 0]
+        if (length(est)) return(stats::median(est))
+      }
+      sum(as.numeric(df$reads[idx]), na.rm = TRUE)
+    }, numeric(1))
+    names(totals) <- sub("\\.(tsv|txt|out|csv)$", "", basename(names(groups)), ignore.case = TRUE)
+    attr(out, "profile_reads") <- totals
+    return(out)
   }
   df <- utils::read.table(path, sep = "\t", quote = "", fill = TRUE,
                           comment.char = "", stringsAsFactors = FALSE)
   if (ncol(df) >= 4L && any(grepl(";", df[[4]]))) {
     ok <- df[[1]] == "C"
-    return(archi_kaiju_names_to_long(df[[3]][ok], df[[4]][ok], rep(1, sum(ok)), sample))
+    out <- archi_kaiju_names_to_long(df[[3]][ok], df[[4]][ok], rep(1, sum(ok)), sample)
+    attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
+    return(out)
   }
   ok <- df[[1]] == "C"
-  archi_kaiju_names_to_long(df[[3]][ok], rep(NA_character_, sum(ok)), rep(1, sum(ok)), sample)
+  out <- archi_kaiju_names_to_long(
+    df[[3]][ok], rep(NA_character_, sum(ok)), rep(1, sum(ok)), sample
+  )
+  attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
+  out
+}
+
+archi_parse_kaiju_lineage <- function(name) {
+  ranks <- archi_rank_cols()
+  lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
+  if (is.na(name) || !nzchar(name)) return(lin)
+  bits <- trimws(strsplit(name, ";", fixed = TRUE)[[1]])
+  bits <- bits[nzchar(bits)]
+  if (!length(bits)) return(lin)
+  prefixed <- vapply(bits, function(bit) {
+    grepl("^[dkpcofgs]__", bit, ignore.case = TRUE)
+  }, logical(1))
+  if (any(prefixed)) {
+    return(archi_parse_qiime_taxon(paste(bits, collapse = ";")))
+  }
+  bits <- bits[!tolower(bits) %in% c("root", "cellular organisms")]
+  # Full NCBI paths can include unranked clades between canonical ranks.
+  unranked <- grepl(
+    "( group| clade| cluster| subgroup| incertae sedis)$",
+    bits, ignore.case = TRUE
+  )
+  bits <- bits[!unranked]
+  endpoint_species <- grepl(" ", utils::tail(bits, 1)) &&
+    !grepl("^unclassified |^candidatus [^ ]+$", utils::tail(bits, 1), ignore.case = TRUE)
+  endpoint <- if (endpoint_species) "species" else "genus"
+  target_ranks <- ranks[seq_len(match(endpoint, ranks))]
+  if (length(bits) > length(target_ranks)) {
+    bits <- utils::tail(bits, length(target_ranks))
+  }
+  # Full paths start at kingdom/superkingdom; short paths are right-aligned.
+  if (length(bits) == length(target_ranks) ||
+      (length(bits) && bits[[1]] %in% c("Bacteria", "Archaea", "Eukaryota", "Viruses"))) {
+    lin[target_ranks[seq_along(bits)]] <- bits
+  } else {
+    lin[utils::tail(target_ranks, length(bits))] <- bits
+  }
+  lin
 }
 
 archi_kaiju_names_to_long <- function(taxid, name, reads, sample) {
@@ -371,13 +444,10 @@ archi_kaiju_names_to_long <- function(taxid, name, reads, sample) {
   name <- vapply(parts, function(z) if (length(z) > 1) z[[2]] else NA_character_, character(1))
   ranks <- archi_rank_cols()
   rows <- lapply(seq_along(taxid), function(i) {
-    lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
     nm <- name[[i]]
+    lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)
     if (!is.na(nm) && grepl(";", nm)) {
-      bits <- trimws(strsplit(nm, ";", fixed = TRUE)[[1]])
-      bits <- bits[nzchar(bits)]
-      use <- utils::tail(bits, length(ranks))
-      lin[seq_len(length(use))] <- use
+      lin <- archi_parse_kaiju_lineage(nm)
     } else if (!is.na(nm) && nzchar(nm)) {
       if (grepl(" ", nm)) lin[["species"]] <- nm else lin[["genus"]] <- nm
     }

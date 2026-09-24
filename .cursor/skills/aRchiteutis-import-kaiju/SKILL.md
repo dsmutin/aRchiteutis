@@ -15,4 +15,8 @@ ps <- kaiju_to_phyloseq("kaiju_summary.tsv", legend = "manifest.csv")
 ps <- kaiju_to_phyloseq("sample_kaiju.out")
 ```
 
-The package example `inst/extdata/kaiju-summary-bee.tsv` is a kaiju2table whose taxon ids and read counts are the genus rows of the bundled Kraken2 report `m11`. Several files are several samples. Host and organelle names are dropped, and a rank-formula tree is attached.
+The package example `inst/extdata/kaiju-example.tsv` is a real
+`kaiju2table` excerpt. Several `file` values or several input files are
+separate samples. Simple names are retained at genus/species; full paths from
+`kaiju2table -p` discard unranked clades before filling canonical ranks. Host
+and organelle names are dropped, and a rank-formula tree is attached.

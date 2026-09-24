@@ -26,7 +26,7 @@ text separated by \code{"; "} fills rank columns; otherwise the taxon name is
 stored at genus or species and a rank tree is still attached.
 }
 \examples{
-kaiju <- system.file("extdata", "kaiju-summary-bee.tsv", package = "aRchiteutis")
+kaiju <- system.file("extdata", "kaiju-example.tsv", package = "aRchiteutis")
 ps <- kaiju_to_phyloseq(kaiju)
 if (inherits(ps, "phyloseq")) phyloseq::ntaxa(ps) else nrow(ps$otu_table)
 

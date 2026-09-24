@@ -471,7 +471,8 @@ archi_kaiju_names_to_long <- function(taxid, name, reads, sample) {
 #' tree is built from the taxonomy table.
 #'
 #' @param features Feature-table `.qza`, an exported feature-table TSV, or a
-#'   directory of artifacts.
+#'   directory of artifacts. A vector merges several runs after checking that
+#'   sample ids do not overlap.
 #' @param taxonomy Taxonomy `.qza` or TSV. Discovered next to `features` when
 #'   that argument is a directory and this is `NULL`.
 #' @param metadata Sample metadata TSV/CSV, or a `.qza`. Same discovery rule.
@@ -494,9 +495,27 @@ qza_to_phyloseq <- function(features, taxonomy = NULL, metadata = NULL, tree = N
     if (is.null(tree)) tree <- found$tree
     features <- found$features
   }
-  if (is.null(features) || !nzchar(features)) {
+  if (is.null(features) || !length(features) || any(!nzchar(features))) {
     stop("No feature table (.qza or TSV) found", call. = FALSE)
   }
+  if (length(features) > 1L) {
+    taxonomy <- archi_recycle_artifacts(taxonomy, length(features), "taxonomy")
+    tree <- archi_recycle_artifacts(tree, length(features), "tree")
+    objects <- lapply(seq_along(features), function(i) {
+      archi_qza_single(
+        features[[i]], taxonomy[[i]], metadata,
+        tree[[i]]
+      )
+    })
+    return(archi_merge_phyloseq(objects))
+  }
+  if (length(taxonomy) > 1L || length(tree) > 1L) {
+    stop("A single feature table accepts at most one taxonomy and one tree", call. = FALSE)
+  }
+  archi_qza_single(features[[1]], taxonomy, metadata, tree)
+}
+
+archi_qza_single <- function(features, taxonomy = NULL, metadata = NULL, tree = NULL) {
   if (requireNamespace("qiime2R", quietly = TRUE) && grepl("\\.qza$", features, ignore.case = TRUE)) {
     args <- list(features = features)
     if (!is.null(taxonomy)) args$taxonomy <- taxonomy
@@ -523,9 +542,9 @@ qza_to_phyloseq <- function(features, taxonomy = NULL, metadata = NULL, tree = N
   otu <- otu[keep, , drop = FALSE]
   tax <- tax[keep, , drop = FALSE]
   tax_df <- as.data.frame(tax, stringsAsFactors = FALSE)
-  tax_df <- fill_na_last_classified(tax_df, archi_rank_cols())
   rownames(tax_df) <- rownames(otu)
   sam <- archi_align_metadata(otu, metadata)
+  sam$profile_reads <- colSums(otu)[rownames(sam)]
   phy <- archi_read_newick(tree)
   phy <- archi_align_tree(phy, rownames(otu))
   if (is.null(phy)) {
@@ -537,24 +556,87 @@ qza_to_phyloseq <- function(features, taxonomy = NULL, metadata = NULL, tree = N
   archi_phyloseq_object(otu, as.matrix(tax_df), sam, phy)
 }
 
+archi_recycle_artifacts <- function(x, n, what) {
+  if (is.null(x)) return(rep(list(NULL), n))
+  if (length(x) == 1L) return(rep(as.list(x), n))
+  if (length(x) != n) {
+    stop("`", what, "` must have length 1 or match `features` (", n, ")", call. = FALSE)
+  }
+  as.list(x)
+}
+
+archi_merge_phyloseq <- function(objects) {
+  unpacked <- lapply(objects, .unpack_phyloseq)
+  samples <- unlist(lapply(unpacked, function(x) colnames(x$otu)), use.names = FALSE)
+  if (anyDuplicated(samples)) {
+    stop("Cannot merge QIIME 2 tables with duplicate sample ids: ",
+         paste(unique(samples[duplicated(samples)]), collapse = ", "), call. = FALSE)
+  }
+  taxa <- unique(unlist(lapply(unpacked, function(x) rownames(x$otu)), use.names = FALSE))
+  otu <- matrix(0, nrow = length(taxa), ncol = length(samples),
+                dimnames = list(taxa, samples))
+  ranks <- archi_rank_cols()
+  tax <- matrix(NA_character_, nrow = length(taxa), ncol = length(ranks),
+                dimnames = list(taxa, ranks))
+  sample_frames <- vector("list", length(unpacked))
+  for (i in seq_along(unpacked)) {
+    item <- unpacked[[i]]
+    otu[rownames(item$otu), colnames(item$otu)] <- item$otu
+    if (!is.null(item$tax)) {
+      tt <- as.data.frame(item$tax, stringsAsFactors = FALSE)
+      names(tt) <- tolower(names(tt))
+      shared_ranks <- intersect(ranks, names(tt))
+      shared_taxa <- intersect(rownames(tt), taxa)
+      for (rk in shared_ranks) {
+        current <- tax[shared_taxa, rk]
+        incoming <- as.character(tt[shared_taxa, rk])
+        use <- (is.na(current) | !nzchar(current)) & !is.na(incoming) & nzchar(incoming)
+        tax[shared_taxa[use], rk] <- incoming[use]
+      }
+    }
+    sad <- item$sad
+    if (is.null(sad)) {
+      sad <- data.frame(sample = colnames(item$otu), row.names = colnames(item$otu))
+    }
+    sample_frames[[i]] <- as.data.frame(sad, stringsAsFactors = FALSE)
+  }
+  all_cols <- unique(unlist(lapply(sample_frames, names), use.names = FALSE))
+  sample_frames <- lapply(sample_frames, function(sad) {
+    for (col in setdiff(all_cols, names(sad))) sad[[col]] <- NA
+    sad[, all_cols, drop = FALSE]
+  })
+  sam <- do.call(rbind, sample_frames)
+  sam <- sam[samples, , drop = FALSE]
+  sam$profile_reads <- colSums(otu)[samples]
+  phy <- ranks_to_tree(data.frame(
+    as.data.frame(tax, stringsAsFactors = FALSE),
+    taxa_id = taxa, tip_name = taxa, stringsAsFactors = FALSE
+  ))
+  archi_phyloseq_object(otu, tax, sam, phy)
+}
+
 archi_discover_qza <- function(dir) {
   files <- list.files(dir, full.names = TRUE)
   bn <- basename(files)
-  pick <- function(pat) {
+  pick_all <- function(pat) {
     hit <- files[grepl(pat, bn, ignore.case = TRUE)]
-    if (length(hit)) hit[[1]] else NULL
+    if (length(hit)) sort(hit) else NULL
   }
   list(
-    features = pick("table.*\\.qza$|feature.*\\.qza$|feature-table\\.tsv$"),
-    taxonomy = pick("taxonom.*\\.(qza|tsv|txt)$"),
-    tree = pick("tree.*\\.(qza|nwk|tre|newick)$"),
-    metadata = pick("metadata.*\\.(tsv|csv|txt)$|manifest.*\\.(tsv|csv)$")
+    features = pick_all("table.*\\.qza$|feature.*\\.qza$|feature-table.*\\.tsv$"),
+    taxonomy = pick_all("taxonom.*\\.(qza|tsv|txt)$"),
+    tree = pick_all("tree.*\\.(qza|nwk|tre|newick)$"),
+    metadata = {
+      hit <- pick_all("metadata.*\\.(tsv|csv|txt)$|manifest.*\\.(tsv|csv)$")
+      if (length(hit)) hit[[1]] else NULL
+    }
   )
 }
 
 archi_qza_extract <- function(path) {
   if (!grepl("\\.qza$", path, ignore.case = TRUE)) return(path)
-  dest <- file.path(tempdir(), paste0("archi-qza-", tools::file_path_sans_ext(basename(path))))
+  hash <- unname(tools::md5sum(path))
+  dest <- file.path(tempdir(), paste0("archi-qza-", hash))
   if (!dir.exists(dest)) utils::unzip(path, exdir = dest)
   dest
 }
@@ -607,7 +689,11 @@ archi_read_biom <- function(path) {
 
 archi_read_feature_tsv <- function(path) {
   lines <- readLines(path, warn = FALSE)
-  lines <- lines[!grepl("^#", lines)]
+  header <- grep("^#(OTU|Feature) ID", lines, ignore.case = TRUE)
+  if (length(header)) {
+    lines[[header[[length(header)]]]] <- sub("^#", "", lines[[header[[length(header)]]]])
+  }
+  lines <- lines[!grepl("^#", lines) & nzchar(lines)]
   sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
   df <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
                           check.names = FALSE, stringsAsFactors = FALSE, quote = "")

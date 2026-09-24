@@ -8,7 +8,8 @@ qza_to_phyloseq(features, taxonomy = NULL, metadata = NULL, tree = NULL)
 }
 \arguments{
 \item{features}{Feature-table \code{.qza}, an exported feature-table TSV, or a
-directory of artifacts.}
+directory of artifacts. A vector merges several runs after checking that
+sample ids do not overlap.}
 
 \item{taxonomy}{Taxonomy \code{.qza} or TSV. Discovered next to \code{features} when
 that argument is a directory and this is \code{NULL}.}

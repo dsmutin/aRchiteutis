@@ -48,4 +48,12 @@ test_that("full Kaiju paths discard unranked clades without shifting ranks", {
   ))
   expect_equal(unname(species[c("kingdom", "phylum", "genus", "species")]),
                c("Bacteria", "Pseudomonadota", "Escherichia", "Escherichia coli"))
+
+  candidatus <- aRchiteutis:::archi_parse_kaiju_lineage(paste(
+    "cellular organisms", "Bacteria", "Candidatus Carsonella",
+    "Candidatus Carsonella ruddii", sep = ";"
+  ))
+  expect_equal(unname(candidatus[c("kingdom", "genus", "species")]),
+               c("Bacteria", "Candidatus Carsonella", "Candidatus Carsonella ruddii"))
+  expect_true(all(is.na(candidatus[c("phylum", "class", "order", "family")])))
 })

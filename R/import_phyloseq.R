@@ -383,10 +383,14 @@ archi_read_kaiju_file <- function(path) {
     attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
     return(out)
   }
+  if (ncol(df) < 3L || !any(df[[1]] %in% c("C", "U"))) {
+    stop("Not a Kaiju summary or per-read file: ", path, call. = FALSE)
+  }
   ok <- df[[1]] == "C"
   out <- archi_kaiju_names_to_long(
     df[[3]][ok], rep(NA_character_, sum(ok)), rep(1, sum(ok)), sample
   )
+  if (!nrow(out)) stop("No classified Kaiju rows in ", path, call. = FALSE)
   attr(out, "profile_reads") <- stats::setNames(nrow(df), sample)
   out
 }
@@ -411,19 +415,35 @@ archi_parse_kaiju_lineage <- function(name) {
     bits, ignore.case = TRUE
   )
   bits <- bits[!unranked]
-  endpoint_species <- grepl(" ", utils::tail(bits, 1)) &&
-    !grepl("^unclassified |^candidatus [^ ]+$", utils::tail(bits, 1), ignore.case = TRUE)
-  endpoint <- if (endpoint_species) "species" else "genus"
-  target_ranks <- ranks[seq_len(match(endpoint, ranks))]
-  if (length(bits) > length(target_ranks)) {
-    bits <- utils::tail(bits, length(target_ranks))
+  if (!length(bits)) return(lin)
+  kingdoms <- c("Bacteria", "Archaea", "Eukaryota", "Viruses")
+  if (bits[[1]] %in% kingdoms) {
+    lin[["kingdom"]] <- bits[[1]]
+    bits <- bits[-1]
   }
-  # Full paths start at kingdom/superkingdom; short paths are right-aligned.
-  if (length(bits) == length(target_ranks) ||
-      (length(bits) && bits[[1]] %in% c("Bacteria", "Archaea", "Eukaryota", "Viruses"))) {
-    lin[target_ranks[seq_along(bits)]] <- bits
+  if (!length(bits)) return(lin)
+  # A binomial, including "Candidatus Name epithet", is a species. The token
+  # before it is the genus. A bare "Candidatus Name" is a genus, not a species.
+  last <- bits[[length(bits)]]
+  species_like <- grepl(" ", last) &&
+    !grepl("^unclassified |^candidatus [^ ]+$", last, ignore.case = TRUE)
+  if (species_like) {
+    lin[["species"]] <- last
+    bits <- bits[-length(bits)]
+    if (length(bits)) {
+      lin[["genus"]] <- bits[[length(bits)]]
+      bits <- bits[-length(bits)]
+    } else {
+      lin[["genus"]] <- sub(" [^ ]+$", "", last)
+    }
   } else {
-    lin[utils::tail(target_ranks, length(bits))] <- bits
+    lin[["genus"]] <- last
+    bits <- bits[-length(bits)]
+  }
+  middle <- c("phylum", "class", "order", "family")
+  if (length(bits)) {
+    if (length(bits) > length(middle)) bits <- utils::tail(bits, length(middle))
+    lin[utils::tail(middle, length(bits))] <- bits
   }
   lin
 }
@@ -443,6 +463,14 @@ archi_kaiju_names_to_long <- function(taxid, name, reads, sample) {
   taxid <- as.integer(vapply(parts, `[[`, character(1), 1))
   name <- vapply(parts, function(z) if (length(z) > 1) z[[2]] else NA_character_, character(1))
   ranks <- archi_rank_cols()
+  if (!length(taxid)) {
+    empty <- data.frame(
+      sample = character(), taxid = integer(), name = character(),
+      rank = character(), reads = numeric(), stringsAsFactors = FALSE
+    )
+    for (rk in ranks) empty[[rk]] <- character()
+    return(empty)
+  }
   rows <- lapply(seq_along(taxid), function(i) {
     nm <- name[[i]]
     lin <- stats::setNames(rep(NA_character_, length(ranks)), ranks)

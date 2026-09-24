@@ -42,7 +42,7 @@ cladogram plus a log2-fold-change bar is drawn with \pkg{ggplot2}.
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")
 legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
-df <- get_counts(path, pattern = "m1[124]_", legend = legend, trim_char = "_")
+df <- get_counts(path, pattern = "m(11|18|4)_", legend = legend, trim_char = "_")
 df2difftree(df[df$clade == "S", ], group = "stage", max_tips = 12)
 
 }

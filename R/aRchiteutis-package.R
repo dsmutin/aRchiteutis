@@ -31,5 +31,5 @@ utils::globalVariables(c(
   # ggraph node/edge computed aesthetics
   "vals",
   "Measure", "Depth", "Sample", "target", "combo", "set", "in_set",
-  "taxon_names", "n_obs"
+  "taxon_names", "n_obs", "display", "is_italic", "id", "log2_lfc"
 ))

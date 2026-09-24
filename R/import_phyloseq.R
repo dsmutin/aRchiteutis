@@ -593,7 +593,7 @@ archi_align_tree <- function(tree, ids) {
 
 archi_finish_qiime2r <- function(ps) {
   if (!requireNamespace("phyloseq", quietly = TRUE)) return(ps)
-  otu <- as(phyloseq::otu_table(ps), "matrix")
+  otu <- methods::as(phyloseq::otu_table(ps), "matrix")
   if (!phyloseq::taxa_are_rows(ps)) otu <- t(otu)
   tax <- tryCatch(as.matrix(phyloseq::tax_table(ps)), error = function(e) NULL)
   if (!is.null(tax)) {

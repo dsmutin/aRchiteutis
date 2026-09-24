@@ -58,7 +58,7 @@ matG <- df_untidy(df, clade = "G", top = 30, scale = "scale")
 
 `archi_report()` is the only report entry point. See `aRchiteutis-report`. Pass `plots` and `beta_method` to rebuild the draft with a different subset. The HTML must keep the sentence that this is a preliminary report only.
 
-Gallery with images: `vignettes.md`. Demo script: `pipeline.R`.
+Gallery with images: `vignettes.md`. Demo script: `examples/pipeline.R`.
 
 ## Rules
 

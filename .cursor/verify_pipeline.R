@@ -36,8 +36,8 @@ gg   <- function(f, p, w = 8, h = 6) ggsave(file.path(outdir, f), p, width = w, 
 base <- function(f, expr, w = 900, h = 700) { png(file.path(outdir, f), width = w, height = h); on.exit(dev.off()); force(expr) }
 
 ## ---- Load example data ------------------------------------------------------
-df_full <- get_counts(path = "test/example", pattern = "decont_b",
-                      legend = "test/example/legend.csv", trim_char = "_")
+df_full <- get_counts(path = "examples/example", pattern = "decont_b",
+                      legend = "examples/example/legend.csv", trim_char = "_")
 df_full$sample <- df_full$sample %>% str_remove("m") %>% fct_inseq
 df_full <- df_full[order(df_full$sample), ]
 df <- df_full[df_full$clade != "S", ]

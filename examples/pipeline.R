@@ -1,5 +1,5 @@
 # Full walkthrough of the aRchiteutis plotting functions on the bundled data.
-# (This mirrors the historical test/pipeline.R but targets the installed
+# (This mirrors the historical examples/pipeline.R but targets the installed
 # package API.)
 
 library(aRchiteutis)

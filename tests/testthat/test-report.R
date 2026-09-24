@@ -73,6 +73,18 @@ test_that("beta, UpSet and difftree panels build for two targets", {
   expect_false(file.exists(file.path(out, "Rplots.pdf")))
 })
 
+test_that("auto source keeps Kraken reports when a Kaiju fixture sits beside them", {
+  out <- tempfile("archi-report-auto")
+  res <- archi_report(
+    system.file("extdata", package = "aRchiteutis"),
+    system.file("extdata", "legend.csv", package = "aRchiteutis"),
+    outdir = out, pattern = "", trim_char = "_", target = "stage",
+    plots = "composition", top = 5L, curve_reps = 1L
+  )
+  expect_true(all(c("m11", "m12") %in% unique(from_phyloseq(res$phyloseq)$sample)))
+  expect_false("kaiju" %in% res$dropped$sample)
+})
+
 test_that("requested report panels fail visibly in strict mode", {
   out <- tempfile("archi-report-strict")
   expect_error(

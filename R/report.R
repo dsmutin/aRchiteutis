@@ -30,19 +30,76 @@ archi_prepare_legend <- function(legend, target, trim_char) {
   list(meta = meta, csv = tmp)
 }
 
+archi_sniff_profile <- function(path) {
+  if (dir.exists(path)) return(NA_character_)
+  if (grepl("\\.qza$", path, ignore.case = TRUE)) return("qza")
+  lines <- readLines(path, n = 5L, warn = FALSE)
+  lines <- lines[nzchar(lines) & !grepl("^#", lines)]
+  if (!length(lines)) return(NA_character_)
+  first <- lines[[1]]
+  if (grepl("taxon_id|taxon_name", first, ignore.case = TRUE)) return("kaiju")
+  if (grepl("new_est_reads", first) || grepl("^name\t", first)) return("bracken")
+  header_fields <- tolower(strsplit(first, "\t", fixed = TRUE)[[1]])
+  if (any(header_fields %in% c("taxid", "taxonomy_id")) &&
+      any(header_fields %in% c("rank", "taxonomy_lvl"))) {
+    return("kraken")
+  }
+  rank_token <- "^(U|R|D|K|P|C|O|F|G|S|S[0-9]|G[0-9]|no rank|unclassified|root|superkingdom|kingdom|phylum|class|order|family|genus|species)$"
+  for (line in lines) {
+    fields <- strsplit(line, "\t", fixed = TRUE)[[1]]
+    pct <- suppressWarnings(as.numeric(fields[[1]]))
+    if (length(fields) >= 6L && !is.na(pct) && pct <= 100 &&
+        any(grepl(rank_token, trimws(fields), ignore.case = TRUE))) {
+      return("kraken")
+    }
+    if (length(fields) >= 3L && fields[[1]] %in% c("C", "U")) return("kaiju")
+  }
+  NA_character_
+}
+
 archi_report_load <- function(path, source, pattern, rank, legend_csv, trim_char,
                               counts, xml) {
   source <- match.arg(source, archi_report_sources())
   if (identical(source, "auto")) {
-    bn <- if (dir.exists(path)) list.files(path, pattern = pattern) else basename(path)
-    source <- if (any(grepl("\\.qza$", bn, ignore.case = TRUE))) {
-      "qza"
-    } else if (any(grepl("kaiju", bn, ignore.case = TRUE))) {
-      "kaiju"
-    } else if (!is.null(counts)) {
-      "abundance"
+    if (!is.null(counts)) {
+      source <- "abundance"
     } else {
-      "kraken"
+      files <- if (length(path) == 1L && dir.exists(path)) {
+        list.files(path, pattern = pattern, full.names = TRUE)
+      } else {
+        path
+      }
+      files <- files[!dir.exists(files)]
+      kinds <- vapply(files, archi_sniff_profile, character(1))
+      if (any(kinds == "qza", na.rm = TRUE)) {
+        source <- "qza"
+      } else {
+        known <- kinds[!is.na(kinds)]
+        if (!length(known)) {
+          stop("No Kraken, Kaiju or QIIME 2 profiles matched", call. = FALSE)
+        }
+        # A stray Kaiju or Bracken fixture must not override a Kraken directory.
+        n_kraken <- sum(kinds == "kraken", na.rm = TRUE)
+        n_kaiju <- sum(kinds == "kaiju", na.rm = TRUE)
+        n_bracken <- sum(kinds == "bracken", na.rm = TRUE)
+        source <- if (n_kraken >= n_kaiju && n_kraken >= n_bracken && n_kraken > 0) {
+          "kraken"
+        } else if (n_kaiju >= n_bracken && n_kaiju > 0) {
+          "kaiju"
+        } else {
+          "kraken"
+        }
+        keep <- if (identical(source, "kaiju")) {
+          !is.na(kinds) & kinds == "kaiju"
+        } else {
+          !is.na(kinds) & kinds %in% c("kraken", "bracken")
+        }
+        if (identical(source, "kraken") && n_kraken > 0) {
+          keep <- !is.na(kinds) & kinds == "kraken"
+        }
+        path <- files[keep]
+        pattern <- ""
+      }
     }
   }
   if (identical(source, "qza")) {

@@ -379,6 +379,8 @@ archi_difftree_ggtree <- function(tree, lfc, layout) {
     p <- ggtree::ggtree(tree, layout = "rectangular", branch.length = "none")
   }
   p <- ggtree::`%<+%`(p, tip_meta)
+  # geom_fruit matches the symbol `geom_col`, not a namespaced function.
+  geom_col <- ggplot2::geom_col
   p +
     ggtree::geom_tiplab(
       ggplot2::aes(label = display, subset = is_italic),
@@ -387,7 +389,7 @@ archi_difftree_ggtree <- function(tree, lfc, layout) {
     ) +
     ggtreeExtra::geom_fruit(
       data = fruit,
-      geom = ggplot2::geom_col,
+      geom = geom_col,
       mapping = ggplot2::aes(y = id, x = log2_lfc, fill = log2_lfc),
       offset = if (is_circ) 0 else 0.05,
       pwidth = if (is_circ) 0.35 else 0.4,

@@ -13,6 +13,10 @@ archi_rank_map <- function() {
   )
 }
 
+archi_read_url_lines <- function(url) readLines(url, warn = FALSE)
+
+archi_request_delay <- function(seconds) Sys.sleep(seconds)
+
 #' Fill empty ranks with the last classified name
 #'
 #' Harness rule: an NA rank inherits the previous non-empty rank so
@@ -175,6 +179,9 @@ parse_ncbi_taxonomy_xml <- function(xml) {
 #' @param taxids Integer or character NCBI taxids.
 #' @param xml Optional character XML. When supplied, no network call is made.
 #'   The example reads a document fetched from NCBI and stored in the package.
+#' @param batch_size Maximum taxids per NCBI efetch request.
+#' @param delay Delay in seconds between live requests. The default stays
+#'   below NCBI's unauthenticated limit of three requests per second.
 #' @return For `taxids_to_lineage`, a data frame. For `taxids_to_tree`, a phylo.
 #'
 #' @examples
@@ -185,24 +192,34 @@ parse_ncbi_taxonomy_xml <- function(xml) {
 #' sort(tr$tip.label)
 #'
 #' @export
-taxids_to_lineage <- function(taxids, xml = NULL) {
+taxids_to_lineage <- function(taxids, xml = NULL, batch_size = 100L, delay = 0.34) {
   taxids <- as.integer(taxids)
   taxids <- taxids[!is.na(taxids)]
   if (!length(taxids)) stop("No taxids", call. = FALSE)
   if (is.null(xml)) {
-    url <- paste0(
-      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=taxonomy&id=",
-      paste(taxids, collapse = ","),
-      "&retmode=xml"
-    )
-    xml <- paste(readLines(url, warn = FALSE), collapse = "\n")
+    ids <- unique(taxids)
+    batch_size <- max(1L, as.integer(batch_size))
+    batches <- split(ids, ceiling(seq_along(ids) / batch_size))
+    records <- lapply(seq_along(batches), function(i) {
+      if (i > 1L && is.finite(delay) && delay > 0) archi_request_delay(delay)
+      url <- paste0(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+        "?db=taxonomy&id=", paste(batches[[i]], collapse = ","),
+        "&retmode=xml&tool=aRchiteutis"
+      )
+      parse_ncbi_taxonomy_xml(paste(archi_read_url_lines(url), collapse = "\n"))
+    })
+    lin <- do.call(rbind, records)
+  } else {
+    lin <- parse_ncbi_taxonomy_xml(xml)
   }
-  lin <- parse_ncbi_taxonomy_xml(xml)
   lin[match(taxids, lin$taxid), , drop = FALSE]
 }
 
 #' @rdname taxids_to_lineage
 #' @export
-taxids_to_tree <- function(taxids, xml = NULL) {
-  ranks_to_tree(taxids_to_lineage(taxids, xml = xml))
+taxids_to_tree <- function(taxids, xml = NULL, batch_size = 100L, delay = 0.34) {
+  ranks_to_tree(taxids_to_lineage(
+    taxids, xml = xml, batch_size = batch_size, delay = delay
+  ))
 }

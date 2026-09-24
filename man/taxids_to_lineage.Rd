@@ -5,15 +5,20 @@
 \alias{taxids_to_tree}
 \title{Fetch NCBI lineages for a taxid vector and build a tree}
 \usage{
-taxids_to_lineage(taxids, xml = NULL)
+taxids_to_lineage(taxids, xml = NULL, batch_size = 100L, delay = 0.34)
 
-taxids_to_tree(taxids, xml = NULL)
+taxids_to_tree(taxids, xml = NULL, batch_size = 100L, delay = 0.34)
 }
 \arguments{
 \item{taxids}{Integer or character NCBI taxids.}
 
 \item{xml}{Optional character XML. When supplied, no network call is made.
 The example reads a document fetched from NCBI and stored in the package.}
+
+\item{batch_size}{Maximum taxids per NCBI efetch request.}
+
+\item{delay}{Delay in seconds between live requests. The default stays
+below NCBI's unauthenticated limit of three requests per second.}
 }
 \value{
 For \code{taxids_to_lineage}, a data frame. For \code{taxids_to_tree}, a phylo.

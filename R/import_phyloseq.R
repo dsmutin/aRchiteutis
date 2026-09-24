@@ -880,39 +880,33 @@ abundance_taxid_to_phyloseq <- function(counts, metadata = NULL, xml = NULL,
     stop("No lineage for taxid(s): ", paste(missing, collapse = ", "), call. = FALSE)
   }
   ranks <- archi_rank_cols()
-  rows <- list()
-  k <- 0L
-  for (j in seq_len(ncol(parsed$counts))) {
-    for (i in seq_len(nrow(parsed$counts))) {
-      reads <- parsed$counts[i, j]
-      if (!is.finite(reads) || reads <= 0) next
-      k <- k + 1L
-      tip <- as.character(lin$tip_name[[i]])
-      rows[[k]] <- data.frame(
-        sample = colnames(parsed$counts)[[j]],
-        taxid = parsed$taxids[[i]],
-        name = if (is.na(tip) || !nzchar(tip)) paste0("tax_", parsed$taxids[[i]]) else tip,
-        rank = "S",
-        reads = reads,
-        lin[i, ranks, drop = FALSE],
-        stringsAsFactors = FALSE
-      )
-    }
-  }
-  if (!length(rows)) stop("Abundance table has no positive counts", call. = FALSE)
+  cells <- which(is.finite(parsed$counts) & parsed$counts > 0, arr.ind = TRUE)
+  if (!nrow(cells)) stop("Abundance table has no positive counts", call. = FALSE)
+  tips <- as.character(lin$tip_name[cells[, 1]])
+  tips[is.na(tips) | !nzchar(tips)] <- paste0("tax_", parsed$taxids[cells[, 1]])[
+    is.na(tips) | !nzchar(tips)
+  ]
+  rank_map <- c(domain = "D", superkingdom = "D", kingdom = "K", phylum = "P",
+                class = "C", order = "O", family = "F", genus = "G", species = "S")
+  rank <- unname(rank_map[as.character(lin$tip_rank[cells[, 1]])])
+  rank[is.na(rank)] <- "S"
+  long <- data.frame(
+    sample = colnames(parsed$counts)[cells[, 2]],
+    taxid = parsed$taxids[cells[, 1]],
+    name = tips,
+    rank = rank,
+    reads = parsed$counts[cells],
+    lin[cells[, 1], ranks, drop = FALSE],
+    stringsAsFactors = FALSE
+  )
   legend <- NULL
   if (!is.null(metadata)) {
-    if (is.character(metadata) && length(metadata) == 1L) {
-      legend <- archi_read_sample_metadata(metadata)
-      if (!isFALSE(trim_char)) {
-        rownames(legend) <- vapply(strsplit(rownames(legend), trim_char, fixed = TRUE),
-                                   function(z) z[[1]], character(1))
-      }
-    } else {
-      legend <- as.data.frame(metadata, stringsAsFactors = FALSE)
-    }
+    legend <- archi_read_legend(metadata, trim_char)
   }
-  archi_assemble_phyloseq(do.call(rbind, rows), legend = legend)
+  archi_assemble_phyloseq(
+    long, legend = legend,
+    profile_reads = colSums(parsed$counts)
+  )
 }
 
 archi_read_abundance_taxid <- function(counts) {

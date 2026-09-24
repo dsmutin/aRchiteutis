@@ -51,3 +51,24 @@ test_that("sanitised rank labels map back to exact feature ids", {
   tree <- ranks_to_tree(lineage)
   expect_setequal(tree$tip.label, c("tax_1", "tax_2"))
 })
+
+test_that("live NCBI taxonomy requests are split into bounded batches", {
+  xml <- readLines(
+    system.file("extdata", "ncbi_taxonomy.xml", package = "aRchiteutis"),
+    warn = FALSE
+  )
+  urls <- character()
+  testthat::local_mocked_bindings(
+    archi_read_url_lines = function(url) {
+      urls <<- c(urls, as.character(url))
+      xml
+    },
+    archi_request_delay = function(seconds) NULL,
+    .package = "aRchiteutis"
+  )
+  lin <- taxids_to_lineage(c(562L, 1578L, 1213723L), batch_size = 2L)
+  expect_equal(nrow(lin), 3L)
+  expect_length(urls, 2L)
+  expect_true(grepl("562,1578", urls[[1]], fixed = TRUE))
+  expect_true(grepl("1213723", urls[[2]], fixed = TRUE))
+})

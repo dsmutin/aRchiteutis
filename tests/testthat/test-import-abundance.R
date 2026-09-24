@@ -20,6 +20,8 @@ test_that("a real taxid abundance table becomes phyloseq", {
   expect_equal(otu["tax_1578", "m12"], 14)
   expect_true(any(grepl("Escherichia coli", tax$species)))
   expect_equal(as.character(sam["m11", "stage"]), "larvae")
+  expect_equal(sam["m11", "profile_reads"], 74)
   expect_s3_class(tree, "phylo")
   expect_true(ape::Ntip(tree) >= 2)
+  expect_setequal(tree$tip.label, rownames(otu))
 })

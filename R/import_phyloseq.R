@@ -695,8 +695,9 @@ archi_read_feature_tsv <- function(path) {
   }
   lines <- lines[!grepl("^#", lines) & nzchar(lines)]
   sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+  quote <- if (identical(sep, ",")) "\"" else ""
   df <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
-                          check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+                          check.names = FALSE, stringsAsFactors = FALSE, quote = quote)
   ids <- as.character(df[[1]])
   df[[1]] <- NULL
   mat <- as.matrix(data.frame(lapply(df, as.numeric), check.names = FALSE, row.names = ids))
@@ -766,8 +767,9 @@ archi_read_sample_metadata <- function(path) {
   lines <- lines[nzchar(lines)]
   if (grepl("^#", lines[[1]])) lines[[1]] <- sub("^#+", "", lines[[1]])
   sep <- if (any(grepl("\t", lines[[1]]))) "\t" else ","
+  quote <- if (identical(sep, ",")) "\"" else ""
   df <- utils::read.delim(text = paste(lines, collapse = "\n"), sep = sep,
-                          check.names = FALSE, stringsAsFactors = FALSE, quote = "")
+                          check.names = FALSE, stringsAsFactors = FALSE, quote = quote)
   id_col <- intersect(c("sample-id", "sample_id", "sampleID", "SampleID", "sample", "SampleID"), names(df))
   if (!length(id_col)) id_col <- names(df)[[1]]
   ids <- as.character(df[[id_col[[1]]]])

@@ -60,23 +60,36 @@ archi_report_load <- function(path, source, pattern, rank, legend_csv, trim_char
 
 #' Flag samples that fail a read-count floor or a rarefaction curve
 #'
-#' Read depth is the sum of counts in the tidy table (one rank, so clade reads
-#' are not added twice). A sample under `min_reads` is dropped. Remaining
-#' samples are rarefied, on the `top` taxa, at half their depth and at full
-#' depth. If observed richness still rises by more than `curve_gain`, the
-#' curve has not levelled off and the sample is dropped.
+#' Read depth uses `profile_reads` from the importer when available; otherwise
+#' it is the sum of counts at the imported rank. A sample under `min_reads` is
+#' dropped. Remaining samples are rarefied on all taxa at `curve_fraction` of
+#' their rank-table depth. If observed richness still rises by more than
+#' `curve_gain` between that point and full depth, the curve has not levelled
+#' off and the sample is dropped.
 #'
 #' @param df Tidy aRchiteutis table.
 #' @param min_reads Minimum per-sample count sum. The harness floor is 1000.
-#' @param curve_gain Maximum allowed relative gain in observed richness.
-#' @param top Taxa used for the curve check.
+#' @param curve_gain Maximum allowed terminal relative gain in observed richness.
+#' @param curve_fraction Fraction of rank-table reads used for the terminal
+#'   rarefaction point.
+#' @param curve_reps Rarefaction replicates used to estimate terminal richness.
 #' @param seed RNG seed.
 #' @return A data frame with columns `sample`, `reads`, `reason`, `detail`.
 #'   Kept samples are not listed.
 #' @keywords internal
-archi_flag_samples <- function(df, min_reads = 1000, curve_gain = 0.5,
-                               top = 40L, seed = 123L) {
-  totals <- tapply(as.numeric(df$N), as.character(df$sample), sum)
+archi_flag_samples <- function(df, min_reads = 1000, curve_gain = 0.15,
+                               curve_fraction = 0.8, curve_reps = 5L,
+                               seed = 123L) {
+  count_totals <- tapply(as.numeric(df$N), as.character(df$sample), sum)
+  totals <- count_totals
+  if ("profile_reads" %in% names(df)) {
+    profile <- tapply(as.numeric(df$profile_reads), as.character(df$sample), function(x) {
+      x <- x[is.finite(x)]
+      if (length(x)) x[[1]] else NA_real_
+    })
+    use <- is.finite(profile) & profile > 0
+    totals[names(profile)[use]] <- profile[use]
+  }
   totals[is.na(totals)] <- 0
   rows <- list()
   k <- 0L
@@ -92,24 +105,29 @@ archi_flag_samples <- function(df, min_reads = 1000, curve_gain = 0.5,
   kept <- setdiff(names(totals), low)
   if (length(kept) && is.finite(curve_gain)) {
     sub <- df[as.character(df$sample) %in% kept, , drop = FALSE]
-    mat <- df_untidy(sub, amount_from = "N", top = top, drop_unclassified = TRUE)
-    set.seed(as.integer(seed))
+    mat <- df_untidy(sub, amount_from = "N", drop_unclassified = TRUE)
+    curve_fraction <- max(0.1, min(0.99, as.numeric(curve_fraction)))
+    curve_reps <- max(1L, as.integer(curve_reps))
     for (s in colnames(mat)) {
       counts <- mat[, s]
       n <- sum(counts)
-      half <- max(1L, as.integer(floor(n / 2)))
-      lo <- archi_rarefy_counts(counts, half)
-      hi <- archi_rarefy_counts(counts, as.integer(n))
-      if (is.null(lo) || is.null(hi)) next
-      obs_lo <- sum(lo > 0)
-      obs_hi <- sum(hi > 0)
+      terminal_depth <- max(1L, as.integer(floor(n * curve_fraction)))
+      obs_lo <- vapply(seq_len(curve_reps), function(rep) {
+        set.seed(as.integer(seed) + match(s, colnames(mat)) * 1000L + rep)
+        rare <- archi_rarefy_counts(counts, terminal_depth)
+        if (is.null(rare)) NA_real_ else sum(rare > 0)
+      }, numeric(1))
+      obs_lo <- mean(obs_lo, na.rm = TRUE)
+      obs_hi <- sum(counts > 0)
+      if (!is.finite(obs_lo) || obs_lo <= 0) next
       gain <- (obs_hi - obs_lo) / max(obs_lo, 1)
       if (gain > curve_gain) {
         k <- k + 1L
         rows[[k]] <- data.frame(
           sample = s, reads = unname(totals[[s]]), reason = "diversity_curve",
           detail = paste0(
-            "observed richness rose from ", obs_lo, " at depth ", half,
+            "observed richness rose from ", signif(obs_lo, 5),
+            " at depth ", terminal_depth,
             " to ", obs_hi, " at depth ", as.integer(n),
             " (relative gain ", signif(gain, 3), ")"
           ),
@@ -127,6 +145,7 @@ archi_flag_samples <- function(df, min_reads = 1000, curve_gain = 0.5,
 }
 
 archi_report_catalog <- function(beta_method, order_samples, style) {
+  bar_style <- if (identical(style, "raincloud")) "raincloud" else "box"
   list(
     composition = sprintf(
       "Stacked composition. Samples ordered by `%s`. Within-sample abundances rescaled to 0-1.",
@@ -134,7 +153,7 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
     ),
     donut = "Mean composition across samples, drawn as a donut. Relative abundance.",
     barplot = sprintf(
-      "Per-taxon distribution across samples. Geometry: `%s`.", style
+      "Per-taxon distribution across samples. Geometry: `%s`.", bar_style
     ),
     alpha = sprintf(
       "Shannon and Simpson on counts. Split by target. Geometry: `%s`.", style
@@ -150,36 +169,107 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
   )
 }
 
-archi_report_draw <- function(id, df, target_col, beta_method, order_samples,
-                              style, top, rarefaction_depths, rarefaction_reps) {
+archi_report_taxonomy <- function(ps) {
+  tax <- .unpack_phyloseq(ps)$tax
+  if (is.null(tax)) return(NULL)
+  tax <- as.data.frame(tax, stringsAsFactors = FALSE)
+  names(tax) <- tolower(names(tax))
+  ranks <- intersect(archi_rank_cols(), names(tax))
+  if (length(ranks) < 2L) return(NULL)
+  tax$taxa <- apply(tax[, ranks, drop = FALSE], 1, function(row) {
+    row <- as.character(row)
+    row <- row[!is.na(row) & nzchar(row)]
+    if (length(row)) utils::tail(row, 1) else NA_character_
+  })
+  tax <- tax[!is.na(tax$taxa) & nzchar(tax$taxa), c("taxa", ranks), drop = FALSE]
+  tax[!duplicated(tax$taxa), , drop = FALSE]
+}
+
+archi_report_draw <- function(id, df, tax, target_col, beta_method, order_samples,
+                              style, top, rarefaction_depths, rarefaction_reps,
+                              contrast = NULL) {
   trimmed <- df_get_top_taxa(df, top = top, drop_unclassified = TRUE)
   switch(id,
     composition = df2composition(trimmed, order_samples = order_samples),
     donut = df2donut(trimmed),
     barplot = df2barplot(trimmed, style = if (style == "raincloud") "raincloud" else "box"),
     alpha = df2alpha(df, split_by = target_col, style = style),
-    beta = df2beta(df, method = beta_method, add_legend = target_col),
+    beta = df2beta(df, clade = NULL, method = beta_method, add_legend = target_col),
     rarefaction = df2rarefaction(
       df, split_by = "target", depths = rarefaction_depths,
       n_reps = rarefaction_reps, top = top
     ),
-    heattree = df2heattree(trimmed, top = top),
+    heattree = df2heattree(trimmed, tax = tax, top = top),
     upset = df2upset(df, group = "target"),
-    difftree = df2difftree(df, group = "target", max_tips = min(20L, top)),
+    difftree = df2difftree(
+      df, group = "target", contrast = contrast, max_tips = min(20L, top)
+    ),
     stop("Unknown plot id: ", id, call. = FALSE)
   )
 }
 
-archi_mqc_yaml <- function(path, id, section, description) {
+archi_base64_file <- function(path) {
+  size <- file.info(path)$size
+  bytes <- as.integer(readBin(path, what = "raw", n = size))
+  alphabet <- strsplit(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+    "", fixed = TRUE
+  )[[1]]
+  pad <- (3L - length(bytes) %% 3L) %% 3L
+  if (pad) bytes <- c(bytes, rep(0L, pad))
+  triples <- matrix(bytes, ncol = 3L, byrow = TRUE)
+  encoded <- cbind(
+    triples[, 1] %/% 4L,
+    (triples[, 1] %% 4L) * 16L + triples[, 2] %/% 16L,
+    (triples[, 2] %% 16L) * 4L + triples[, 3] %/% 64L,
+    triples[, 3] %% 64L
+  )
+  chars <- alphabet[as.vector(t(encoded)) + 1L]
+  if (pad) chars[(length(chars) - pad + 1L):length(chars)] <- "="
+  paste(chars, collapse = "")
+}
+
+archi_mqc_image <- function(path, id, section, description, image) {
+  data <- paste0(
+    "<div class='mqc-custom-content-image'><img alt='",
+    archi_html_escape(section),
+    "' src='data:image/png;base64,", archi_base64_file(image), "' /></div>"
+  )
   writeLines(c(
     paste0("id: \"", id, "\""),
     paste0("section_name: \"", section, "\""),
     paste0("description: \"", gsub("\"", "'", description), "\""),
     "plot_type: \"image\"",
+    "data: |",
+    paste0("  ", data),
     "pconfig:",
     paste0("  id: \"", id, "\""),
     paste0("  title: \"", section, "\"")
   ), path)
+}
+
+archi_mqc_table <- function(path, dropped) {
+  data <- dropped
+  if (!nrow(data)) {
+    data <- data.frame(
+      sample = "none", reads = 0, reason = "none",
+      detail = "No samples were removed by the configured QC checks.",
+      stringsAsFactors = FALSE
+    )
+  }
+  header <- c(
+    "# id: architeutis-dropped",
+    "# section_name: Dropped samples",
+    "# description: Samples removed before plotting because of read depth or a rarefaction curve that was still rising.",
+    "# plot_type: table",
+    "# pconfig:",
+    "#   id: architeutis-dropped",
+    "#   title: Dropped samples"
+  )
+  table_lines <- capture.output(utils::write.table(
+    data, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE
+  ))
+  writeLines(c(header, table_lines), path)
 }
 
 archi_html_escape <- function(x) {
@@ -228,7 +318,7 @@ archi_write_report_html <- function(path, dropped, sections, disclaimer) {
 #' object with a taxonomy tree, and drops samples that fall below `min_reads`
 #' or whose rarefaction curve is still rising. Dropped samples are written to
 #' `dropped_samples.csv` and shown as a table. Each requested `df2*` plot is
-#' saved with a one-line method caption as MultiQC custom-content PNG/YAML,
+#' saved with a one-line method caption as MultiQC custom content,
 #' and the same panels are collected into `architeutis_report.html`.
 #'
 #' The HTML and the MultiQC section both end with the statement that this is
@@ -248,7 +338,10 @@ archi_write_report_html <- function(path, dropped, sections, disclaimer) {
 #' @param target Column in `legend` copied to `target` for grouped plots.
 #' @param min_reads Samples below this count sum are dropped (`read_count`).
 #' @param curve_gain Samples whose observed richness rises by more than this
-#'   fraction between half depth and full depth are dropped (`diversity_curve`).
+#'   fraction between `curve_fraction` depth and full depth are dropped
+#'   (`diversity_curve`).
+#' @param curve_fraction Terminal rarefaction fraction used by the curve check.
+#' @param curve_reps Replicates used by the curve check.
 #' @param plots Character vector of plot ids. Any of `composition`, `donut`,
 #'   `barplot`, `alpha`, `beta`, `rarefaction`, `heattree`, `upset`, `difftree`.
 #' @param beta_method Name passed to [df2beta()], including phyloseq distances
@@ -259,6 +352,10 @@ archi_write_report_html <- function(path, dropped, sections, disclaimer) {
 #' @param rarefaction_depths Depths for [df2rarefaction()]. `NULL` uses a short
 #'   grid capped at the smallest kept library.
 #' @param rarefaction_reps Replicates per rarefaction depth.
+#' @param contrast Optional two target levels for `difftree`. Required when the
+#'   target column has more than two levels.
+#' @param strict Stop if a requested plot fails or does not return a ggplot.
+#'   Set `FALSE` to keep the error as a note in the standalone HTML.
 #' @param counts Abundance table for `source = "abundance"`.
 #' @param xml NCBI taxonomy XML for the abundance importer. `NULL` fetches.
 #' @return Invisibly, a list with `dropped`, `html`, `outdir` and `plots`.
@@ -281,7 +378,9 @@ archi_report <- function(path, legend, outdir,
                          source = c("auto", "kraken", "kaiju", "qza", "abundance"),
                          target = "target",
                          min_reads = 1000,
-                         curve_gain = 0.5,
+                         curve_gain = 0.15,
+                         curve_fraction = 0.8,
+                         curve_reps = 5L,
                          plots = c("composition", "donut", "alpha", "beta", "rarefaction"),
                          beta_method = "bray",
                          order_samples = c("fpc", "hclust", "abundance", "alpha", "none"),
@@ -289,6 +388,8 @@ archi_report <- function(path, legend, outdir,
                          top = 15L,
                          rarefaction_depths = NULL,
                          rarefaction_reps = 1L,
+                         contrast = NULL,
+                         strict = TRUE,
                          counts = NULL,
                          xml = NULL) {
   source <- match.arg(source)
@@ -303,11 +404,14 @@ archi_report <- function(path, legend, outdir,
   prepared <- archi_prepare_legend(legend, target, trim_char)
   ps <- archi_report_load(path, source, pattern, rank, prepared$csv, trim_char, counts, xml)
   df <- from_phyloseq(ps)
+  tax <- archi_report_taxonomy(ps)
   if (!"target" %in% names(df)) {
     stop("Imported table has no target column after the legend join", call. = FALSE)
   }
-  dropped <- archi_flag_samples(df, min_reads = min_reads, curve_gain = curve_gain,
-                                top = top)
+  dropped <- archi_flag_samples(
+    df, min_reads = min_reads, curve_gain = curve_gain,
+    curve_fraction = curve_fraction, curve_reps = curve_reps
+  )
   kept_ids <- setdiff(unique(as.character(df$sample)), dropped$sample)
   df <- df[as.character(df$sample) %in% kept_ids, , drop = FALSE]
 
@@ -317,17 +421,9 @@ archi_report <- function(path, legend, outdir,
   utils::write.csv(dropped, file.path(outdir, "dropped_samples.csv"), row.names = FALSE)
 
   disclaimer <- "This is a preliminary report only, not a final analysis."
+  archi_mqc_table(file.path(mqc, "architeutis-dropped_mqc.tsv"), dropped)
   writeLines(c(
-    "id: \"architeutis_dropped\"",
-    "section_name: \"Dropped samples\"",
-    "description: \"Samples removed before plotting because of read depth or a rarefaction curve that was still rising.\"",
-    "plot_type: \"table\"",
-    "pconfig:",
-    "  id: \"architeutis_dropped\"",
-    "  title: \"Dropped samples\""
-  ), file.path(mqc, "architeutis-dropped_mqc.yaml"))
-  writeLines(c(
-    "id: \"architeutis_disclaimer\"",
+    "id: \"architeutis-disclaimer\"",
     "section_name: \"Preliminary report\"",
     "description: \"Draft status\"",
     "plot_type: \"html\"",
@@ -340,12 +436,17 @@ archi_report <- function(path, legend, outdir,
   if (length(kept_ids) >= 1L) {
     for (id in plots) {
       drawn <- tryCatch(
-        archi_report_draw(id, df, target_col, beta_method, order_samples, style,
-                          top, rarefaction_depths, rarefaction_reps),
+        archi_report_draw(
+          id, df, tax, target_col, beta_method, order_samples, style,
+          top, rarefaction_depths, rarefaction_reps, contrast
+        ),
         error = function(e) e
       )
       caption <- catalog[[id]]
       if (inherits(drawn, "error")) {
+        if (isTRUE(strict)) {
+          stop("Report plot `", id, "` failed: ", conditionMessage(drawn), call. = FALSE)
+        }
         sections[[length(sections) + 1L]] <- list(
           title = id, caption = caption, image = NULL,
           note = conditionMessage(drawn)
@@ -353,18 +454,23 @@ archi_report <- function(path, legend, outdir,
         next
       }
       if (!inherits(drawn, "ggplot")) {
+        if (isTRUE(strict)) {
+          stop("Report plot `", id, "` did not return a ggplot object", call. = FALSE)
+        }
         sections[[length(sections) + 1L]] <- list(
           title = id, caption = caption, image = NULL,
           note = "The plot function did not return a ggplot object."
         )
         next
       }
-      png <- file.path(mqc, paste0("archi-", id, "_mqc.png"))
+      png <- file.path(mqc, paste0("archi-", id, ".png"))
       pdf <- file.path(outdir, paste0(id, ".pdf"))
       ggplot2::ggsave(png, drawn, width = 8, height = 5, dpi = 150)
       ggplot2::ggsave(pdf, drawn, width = 8, height = 5)
-      archi_mqc_yaml(file.path(mqc, paste0("archi-", id, "_mqc.yaml")),
-                     paste0("archi_", id), id, caption)
+      archi_mqc_image(
+        file.path(mqc, paste0("archi-", id, "_mqc.yaml")),
+        paste0("archi-", id), id, caption, png
+      )
       written <- c(written, png)
       sections[[length(sections) + 1L]] <- list(
         title = id, caption = caption,
@@ -378,5 +484,8 @@ archi_report <- function(path, legend, outdir,
     try(system2("multiqc", c(mqc, "-o", file.path(outdir, "multiqc_report"), "-f"),
                 stdout = FALSE, stderr = FALSE), silent = TRUE)
   }
-  invisible(list(dropped = dropped, html = html, outdir = outdir, plots = written))
+  invisible(list(
+    phyloseq = ps, dropped = dropped, html = html,
+    outdir = outdir, plots = written
+  ))
 }

@@ -14,7 +14,9 @@ archi_report(
   source = c("auto", "kraken", "kaiju", "qza", "abundance"),
   target = "target",
   min_reads = 1000,
-  curve_gain = 0.5,
+  curve_gain = 0.15,
+  curve_fraction = 0.8,
+  curve_reps = 5L,
   plots = c("composition", "donut", "alpha", "beta", "rarefaction"),
   beta_method = "bray",
   order_samples = c("fpc", "hclust", "abundance", "alpha", "none"),
@@ -22,6 +24,8 @@ archi_report(
   top = 15L,
   rarefaction_depths = NULL,
   rarefaction_reps = 1L,
+  contrast = NULL,
+  strict = TRUE,
   counts = NULL,
   xml = NULL
 )
@@ -50,7 +54,12 @@ overwritten.}
 \item{min_reads}{Samples below this count sum are dropped (\code{read_count}).}
 
 \item{curve_gain}{Samples whose observed richness rises by more than this
-fraction between half depth and full depth are dropped (\code{diversity_curve}).}
+fraction between \code{curve_fraction} depth and full depth are dropped
+(\code{diversity_curve}).}
+
+\item{curve_fraction}{Terminal rarefaction fraction used by the curve check.}
+
+\item{curve_reps}{Replicates used by the curve check.}
 
 \item{plots}{Character vector of plot ids. Any of \code{composition}, \code{donut},
 \code{barplot}, \code{alpha}, \code{beta}, \code{rarefaction}, \code{heattree}, \code{upset}, \code{difftree}.}
@@ -69,6 +78,12 @@ grid capped at the smallest kept library.}
 
 \item{rarefaction_reps}{Replicates per rarefaction depth.}
 
+\item{contrast}{Optional two target levels for \code{difftree}. Required when the
+target column has more than two levels.}
+
+\item{strict}{Stop if a requested plot fails or does not return a ggplot.
+Set \code{FALSE} to keep the error as a note in the standalone HTML.}
+
 \item{counts}{Abundance table for \code{source = "abundance"}.}
 
 \item{xml}{NCBI taxonomy XML for the abundance importer. \code{NULL} fetches.}
@@ -81,7 +96,7 @@ Reads every profile the chosen importer understands, builds a phyloseq
 object with a taxonomy tree, and drops samples that fall below \code{min_reads}
 or whose rarefaction curve is still rising. Dropped samples are written to
 \code{dropped_samples.csv} and shown as a table. Each requested \verb{df2*} plot is
-saved with a one-line method caption as MultiQC custom-content PNG/YAML,
+saved with a one-line method caption as MultiQC custom content,
 and the same panels are collected into \code{architeutis_report.html}.
 }
 \details{

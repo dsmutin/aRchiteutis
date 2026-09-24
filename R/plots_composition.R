@@ -112,8 +112,10 @@ df2composition <- function(df, order_samples = c("fpc", "hclust", "abundance", "
                                    fill = forcats::fct_inorder(.data$taxa))) +
     ggplot2::geom_col(position = "stack") +
     ggplot2::scale_fill_discrete("Taxa", type = rev(viridis::viridis(lvir))) +
-    ggplot2::scale_x_continuous(limits = c(0, 1),
-                                expand = ggplot2::expansion(mult = c(0, 0.02))) +
+    ggplot2::scale_x_continuous(
+      expand = ggplot2::expansion(mult = c(0, 0.02))
+    ) +
+    ggplot2::coord_cartesian(xlim = c(0, 1)) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(
       legend.position = "bottom",

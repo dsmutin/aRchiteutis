@@ -2,13 +2,9 @@ test_that("real QIIME 2 moving-pictures qza files become phyloseq", {
   skip_if_not_installed("biomformat")
   qza <- system.file("extdata", "qza", package = "aRchiteutis")
   ps <- qza_to_phyloseq(qza)
-  otu <- if (inherits(ps, "phyloseq")) as.matrix(phyloseq::otu_table(ps)) else ps$otu_table
-  tax <- if (inherits(ps, "phyloseq")) {
-    as.data.frame(phyloseq::tax_table(ps))
-  } else {
-    as.data.frame(ps$tax_table)
-  }
-  sam <- if (inherits(ps, "phyloseq")) as.data.frame(phyloseq::sample_data(ps)) else ps$sample_data
+  otu <- archi_plain_otu(ps)
+  tax <- archi_plain_tax(ps)
+  sam <- archi_plain_sam(ps)
   tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
   expect_true(nrow(otu) > 50)
   expect_true(all(c("L1S8", "L1S57") %in% colnames(otu)))
@@ -36,7 +32,7 @@ test_that("several feature tables merge without losing taxa or samples", {
   writeLines(c("sample-id\ttarget", "sample-a\tA", "sample-b\tB"), metadata)
 
   ps <- qza_to_phyloseq(c(a, b), taxonomy = taxonomy, metadata = metadata)
-  otu <- if (inherits(ps, "phyloseq")) as.matrix(phyloseq::otu_table(ps)) else ps$otu_table
+  otu <- archi_plain_otu(ps)
   tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
   expect_equal(unname(otu["f1", c("sample-a", "sample-b")]), c(10, 3))
   expect_equal(unname(otu["f2", c("sample-a", "sample-b")]), c(2, 8))

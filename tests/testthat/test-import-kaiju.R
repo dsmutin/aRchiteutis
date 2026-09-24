@@ -1,18 +1,14 @@
 test_that("a Kaiju summary table becomes phyloseq", {
   f <- system.file("extdata", "kaiju-example.tsv", package = "aRchiteutis")
   ps <- kaiju_to_phyloseq(f)
-  otu <- if (inherits(ps, "phyloseq")) as.matrix(phyloseq::otu_table(ps)) else ps$otu_table
+  otu <- archi_plain_otu(ps)
   expect_equal(ncol(otu), 1L)
   expect_equal(nrow(otu), 3L)
   expect_equal(otu["tax_55507", "kaiju"], 308688)
   tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
   expect_s3_class(tree, "phylo")
   expect_setequal(tree$tip.label, rownames(otu))
-  sam <- if (inherits(ps, "phyloseq")) {
-    as.data.frame(phyloseq::sample_data(ps))
-  } else {
-    ps$sample_data
-  }
+  sam <- archi_plain_sam(ps)
   expect_gt(sam["kaiju", "profile_reads"], sum(otu))
 })
 

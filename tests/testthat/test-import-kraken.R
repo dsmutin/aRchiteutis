@@ -3,15 +3,10 @@ test_that("real Kraken2 reports become a phyloseq-shaped object", {
   legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
   ps <- kraken_to_phyloseq(path, pattern = "m1[12]_.*k2", legend = legend,
                            trim_char = "_", rank = "G")
-  otu <- if (inherits(ps, "phyloseq")) phyloseq::otu_table(ps) else ps$otu_table
-  tax <- if (inherits(ps, "phyloseq")) {
-    as.data.frame(phyloseq::tax_table(ps))
-  } else {
-    as.data.frame(ps$tax_table)
-  }
-  sam <- if (inherits(ps, "phyloseq")) as.data.frame(phyloseq::sample_data(ps)) else ps$sample_data
+  otu <- archi_plain_otu(ps)
+  tax <- archi_plain_tax(ps)
+  sam <- archi_plain_sam(ps)
   tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
-  otu <- as.matrix(otu)
   expect_true(nrow(otu) > 5)
   expect_true(all(c("m11", "m12") %in% colnames(otu)))
   expect_true("genus" %in% names(tax))
@@ -80,10 +75,6 @@ test_that("a QIIME 2 TSV manifest is preserved by Kraken import", {
     system.file("extdata", package = "aRchiteutis"),
     pattern = "m1[12]_.*k2", legend = manifest, trim_char = "_"
   )
-  sam <- if (inherits(ps, "phyloseq")) {
-    as.data.frame(phyloseq::sample_data(ps))
-  } else {
-    ps$sample_data
-  }
+  sam <- archi_plain_sam(ps)
   expect_equal(as.character(sam[c("m11", "m12"), "target"]), c("larvae", "pupa"))
 })

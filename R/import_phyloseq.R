@@ -847,12 +847,46 @@ archi_align_tree <- function(tree, ids) {
   tree
 }
 
+archi_standard_tax <- function(tax) {
+  tax <- as.matrix(tax)
+  ranks <- archi_rank_cols()
+  nm <- tolower(colnames(tax))
+  if (is.null(nm)) nm <- character(ncol(tax))
+  aliases <- c(
+    kingdom = "kingdom", domain = "kingdom", superkingdom = "kingdom",
+    phylum = "phylum", class = "class", order = "order", family = "family",
+    genus = "genus", species = "species",
+    rank1 = "kingdom", rank2 = "phylum", rank3 = "class", rank4 = "order",
+    rank5 = "family", rank6 = "genus", rank7 = "species"
+  )
+  mapped <- unname(aliases[nm])
+  if (any(!is.na(mapped))) {
+    out <- matrix(NA_character_, nrow(tax), length(ranks),
+                  dimnames = list(rownames(tax), ranks))
+    for (i in which(!is.na(mapped))) {
+      out[, mapped[[i]]] <- as.character(tax[, i])
+    }
+    return(out)
+  }
+  text_col <- which(nm %in% c("taxon", "taxonomy", "tax"))
+  if (length(text_col)) {
+    parsed <- lapply(as.character(tax[, text_col[[1]]]), archi_parse_qiime_taxon)
+    out <- do.call(rbind, parsed)
+    rownames(out) <- rownames(tax)
+    return(as.matrix(out))
+  }
+  colnames(tax) <- nm
+  tax
+}
+
 archi_finish_qiime2r <- function(ps) {
   if (!requireNamespace("phyloseq", quietly = TRUE)) return(ps)
   otu <- methods::as(phyloseq::otu_table(ps), "matrix")
   if (!phyloseq::taxa_are_rows(ps)) otu <- t(otu)
   tax <- tryCatch(as.matrix(phyloseq::tax_table(ps)), error = function(e) NULL)
   if (!is.null(tax)) {
+    tax <- archi_standard_tax(tax)
+    phyloseq::tax_table(ps) <- phyloseq::tax_table(tax)
     drop <- apply(tax, 1, function(row) {
       any(grepl("Chloroplast|Mitochondria|Chordata", row, ignore.case = TRUE))
     })

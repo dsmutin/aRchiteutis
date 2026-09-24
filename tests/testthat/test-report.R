@@ -22,7 +22,7 @@ test_that("a real Kraken2 subset becomes a preliminary report", {
   expect_true(grepl("data:image/png;base64", mqc, fixed = TRUE))
   expect_true(nrow(res$dropped) == 0L || all(res$dropped$reason %in% c("read_count", "diversity_curve")))
   ps <- res$phyloseq
-  otu <- if (inherits(ps, "phyloseq")) as.matrix(phyloseq::otu_table(ps)) else ps$otu_table
+  otu <- archi_plain_otu(ps)
   tree <- if (inherits(ps, "phyloseq")) phyloseq::phy_tree(ps) else ps$phy_tree
   expect_setequal(tree$tip.label, rownames(otu))
 })

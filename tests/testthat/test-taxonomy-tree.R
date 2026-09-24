@@ -34,3 +34,20 @@ test_that("rank formula keeps a multifurcation and is not a binary hclust", {
   expect_true(any(kids > 2L))
   expect_lt(max(ape::node.depth(tr)), 8)
 })
+
+test_that("sanitised rank labels map back to exact feature ids", {
+  lineage <- data.frame(
+    kingdom = "Bacteria", phylum = "Bacillota", class = "Bacilli",
+    order = "Bacillales", family = "Bacillaceae",
+    genus = c("Bacillus", "Bacillus"),
+    species = c(
+      "unclassified Bacillus (in: Bacteria)",
+      "unclassified Bacillus [in: Bacteria]"
+    ),
+    tip_name = c("tax_1", "tax_2"),
+    taxa_id = c("tax_1", "tax_2"),
+    stringsAsFactors = FALSE
+  )
+  tree <- ranks_to_tree(lineage)
+  expect_setequal(tree$tip.label, c("tax_1", "tax_2"))
+})

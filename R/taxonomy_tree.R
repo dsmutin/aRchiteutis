@@ -25,16 +25,14 @@ archi_rank_map <- function() {
 fill_na_last_classified <- function(tax_df, ranks = archi_rank_cols()) {
   tax_df <- as.data.frame(tax_df, stringsAsFactors = FALSE)
   ranks <- intersect(ranks, names(tax_df))
-  for (i in seq_len(nrow(tax_df))) {
-    last <- NA_character_
-    for (rk in ranks) {
-      v <- tax_df[[rk]][i]
-      if (is.null(v) || length(v) == 0L || is.na(v) || !nzchar(as.character(v))) {
-        tax_df[[rk]][i] <- if (!is.na(last) && nzchar(last)) last else NA_character_
-      } else {
-        last <- as.character(v)
-      }
-    }
+  if (!length(ranks) || !nrow(tax_df)) return(tax_df)
+  last <- rep(NA_character_, nrow(tax_df))
+  for (rk in ranks) {
+    current <- as.character(tax_df[[rk]])
+    present <- !is.na(current) & nzchar(current)
+    current[!present] <- last[!present]
+    last[present] <- current[present]
+    tax_df[[rk]] <- current
   }
   tax_df
 }
@@ -102,9 +100,16 @@ ranks_to_tree <- function(lineage_df) {
   suffix <- if ("taxid" %in% names(df)) df$taxid else df$taxa_id
   df[[last]] <- archi_uniquify_last_rank(last_vals, suffix)
   tax_df_phy <- archi_sanitize_tax_df(df, ranks)
+  # Sanitising punctuation can create a second collision (for example
+  # "A (group)" and "A [group]"). Formula-tree tip labels must stay unique so
+  # each one can be mapped back to its requested phyloseq feature id.
+  tax_df_phy[[last]] <- factor(
+    make.unique(as.character(tax_df_phy[[last]]), sep = "_"),
+    levels = unique(make.unique(as.character(tax_df_phy[[last]]), sep = "_"))
+  )
   form <- stats::as.formula(paste("~", paste(ranks, collapse = " / ")))
   tr <- ape::as.phylo(data = tax_df_phy, form)
-  last_now <- as.character(df[[last]])
+  last_now <- as.character(tax_df_phy[[last]])
   sci <- as.character(df$tip_name)
   tip_map <- stats::setNames(sci, last_now)
   keep <- !is.na(tip_map) & nzchar(tip_map)

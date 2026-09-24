@@ -7,6 +7,22 @@ archi_rank_code <- function() {
     O = "order", F = "family", G = "genus", S = "species")
 }
 
+archi_canonical_rank_code <- function(rank) {
+  rank <- trimws(as.character(rank))
+  code <- toupper(rank)
+  full <- c(
+    domain = "D", superkingdom = "D", kingdom = "K",
+    phylum = "P", class = "C", order = "O", family = "F",
+    genus = "G", species = "S", root = "R", unclassified = "U"
+  )
+  out <- rep(NA_character_, length(rank))
+  exact_code <- code %in% c("U", "R", "D", "K", "P", "C", "O", "F", "G", "S")
+  out[exact_code] <- code[exact_code]
+  named <- tolower(rank) %in% names(full)
+  out[named] <- unname(full[tolower(rank[named])])
+  out
+}
+
 archi_host_name <- function(name) {
   grepl("Chordata|Mitochondria|Chloroplast", name, ignore.case = TRUE)
 }
@@ -25,37 +41,68 @@ archi_host_name <- function(name) {
 read_classifier_report <- function(path, rank = "G") {
   sample <- basename(path)
   sample <- sub("\\.(txt|tsv|report|kreport|bracken)$", "", sample, ignore.case = TRUE)
-  first <- readLines(path, n = 1L, warn = FALSE)
+  lines <- readLines(path, warn = FALSE)
+  content <- lines[nzchar(lines) & !grepl("^#", lines)]
+  if (!length(content)) stop("Empty classifier report: ", path, call. = FALSE)
+  first <- content[[1]]
   if (grepl("new_est_reads", first) || grepl("^name\t", first)) {
     return(archi_read_bracken(path, sample))
   }
-  df <- utils::read.table(path, sep = "\t", quote = "", fill = TRUE,
-                          comment.char = "", header = FALSE, stringsAsFactors = FALSE)
+  fields <- strsplit(first, "\t", fixed = TRUE)[[1]]
+  has_header <- any(tolower(fields) %in% c("taxid", "taxonomy_id")) &&
+    any(tolower(fields) %in% c("rank", "taxonomy_lvl"))
+  df <- utils::read.table(
+    text = paste(content, collapse = "\n"), sep = "\t", quote = "", fill = TRUE,
+    comment.char = "", header = has_header, check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
   if (ncol(df) < 6L) stop("Kraken-style report needs at least 6 columns: ", path, call. = FALSE)
-  # KrakenUniq: pct, reads, taxReads, kmers, dup, taxID, rank, name
-  if (ncol(df) >= 8L && grepl("^[A-Z][0-9]?$", as.character(df[[7]][1]))) {
-    name <- trimws(df[[ncol(df)]])
-    out <- data.frame(
-      taxid = as.integer(df[[6]]),
-      rank = sub("[0-9]+$", "", as.character(df[[7]])),
-      reads = as.numeric(df[[2]]),
-      name = name,
-      depth = nchar(df[[ncol(df)]]) - nchar(name),
-      stringsAsFactors = FALSE
-    )
+  if (has_header) {
+    low <- tolower(names(df))
+    id_col <- match(TRUE, low %in% c("taxid", "taxonomy_id"))
+    rank_col <- match(TRUE, low %in% c("rank", "taxonomy_lvl"))
+    name_col <- match(TRUE, low %in% c("taxname", "name", "taxonomy_name"))
+    reads_col <- match(TRUE, low %in% c("reads", "clade_reads", "new_est_reads"))
+    pct_col <- match(TRUE, low %in% c("%", "percentage", "percent"))
   } else {
-    name <- trimws(df[[6]])
-    out <- data.frame(
-      taxid = as.integer(df[[5]]),
-      rank = sub("[0-9]+$", "", as.character(df[[4]])),
-      reads = as.numeric(df[[2]]),
-      name = name,
-      depth = nchar(as.character(df[[6]])) - nchar(name),
-      stringsAsFactors = FALSE
-    )
+    # Kraken/Kraken2: 6 columns. Kraken2 with minimizer data: 8 columns.
+    # KrakenUniq: 9 columns (% reads taxReads kmers dup cov taxID rank taxName).
+    if (ncol(df) >= 9L) {
+      id_col <- 7L
+      rank_col <- 8L
+      name_col <- 9L
+    } else {
+      rank_col <- ncol(df) - 2L
+      id_col <- ncol(df) - 1L
+      name_col <- ncol(df)
+    }
+    reads_col <- 2L
+    pct_col <- 1L
+  }
+  needed <- c(id_col, rank_col, name_col, reads_col)
+  if (anyNA(needed)) stop("Unrecognized classifier report columns: ", path, call. = FALSE)
+  raw_name <- as.character(df[[name_col]])
+  name <- trimws(raw_name)
+  out <- data.frame(
+    taxid = suppressWarnings(as.integer(df[[id_col]])),
+    rank_raw = as.character(df[[rank_col]]),
+    rank = archi_canonical_rank_code(df[[rank_col]]),
+    reads = suppressWarnings(as.numeric(df[[reads_col]])),
+    percentage = if (is.na(pct_col)) NA_real_ else suppressWarnings(as.numeric(df[[pct_col]])),
+    name = name,
+    depth = nchar(raw_name) - nchar(name),
+    stringsAsFactors = FALSE
+  )
+  total_rows <- out$rank %in% c("U", "R") |
+    tolower(out$name) %in% c("root", "unclassified")
+  total_reads <- sum(out$reads[total_rows], na.rm = TRUE)
+  if (!is.finite(total_reads) || total_reads <= 0) {
+    total_reads <- max(out$reads, na.rm = TRUE)
   }
   out <- out[!is.na(out$taxid) & out$taxid > 0L, , drop = FALSE]
-  archi_lineage_from_kraken(out, sample = sample, rank = rank)
+  result <- archi_lineage_from_kraken(out, sample = sample, rank = rank)
+  attr(result, "profile_reads") <- total_reads
+  result
 }
 
 archi_read_bracken <- function(path, sample) {
@@ -64,7 +111,7 @@ archi_read_bracken <- function(path, sample) {
     stop("Bracken table needs name, new_est_reads, taxonomy_id: ", path, call. = FALSE)
   }
   rank <- if ("taxonomy_lvl" %in% names(df)) as.character(df$taxonomy_lvl) else "G"
-  data.frame(
+  out <- data.frame(
     sample = sample,
     taxid = as.integer(df$taxonomy_id),
     name = as.character(df$name),
@@ -76,6 +123,8 @@ archi_read_bracken <- function(path, sample) {
     species = ifelse(sub("[0-9]+$", "", rank) == "S", as.character(df$name), NA_character_),
     stringsAsFactors = FALSE
   )
+  attr(out, "profile_reads") <- sum(out$reads, na.rm = TRUE)
+  out
 }
 
 archi_lineage_from_kraken <- function(out, sample, rank) {
@@ -119,14 +168,17 @@ archi_lineage_from_kraken <- function(out, sample, rank) {
 
 archi_read_legend <- function(legend, trim_char = FALSE) {
   if (isFALSE(legend) || is.null(legend)) return(NULL)
-  df <- utils::read.csv(legend, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
-  id_col <- intersect(c("sample-id", "sample_id", "sampleID", "SampleID", "sample"), names(df))
-  if (length(id_col)) {
+  df <- if (is.character(legend) && length(legend) == 1L) {
+    archi_read_sample_metadata(legend)
+  } else {
+    as.data.frame(legend, stringsAsFactors = FALSE)
+  }
+  ids <- rownames(df)
+  if (is.null(ids) || identical(ids, as.character(seq_len(nrow(df))))) {
+    id_col <- intersect(c("sample-id", "sample_id", "sampleID", "SampleID", "sample"), names(df))
+    if (!length(id_col)) id_col <- names(df)[[1]]
     ids <- as.character(df[[id_col[[1]]]])
     df[[id_col[[1]]]] <- NULL
-  } else {
-    ids <- rownames(utils::read.csv(legend, header = TRUE, row.names = 1, check.names = FALSE))
-    df <- utils::read.csv(legend, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
   }
   if (!isFALSE(trim_char)) {
     ids <- vapply(strsplit(ids, trim_char, fixed = TRUE), function(z) z[[1]], character(1))
@@ -135,8 +187,12 @@ archi_read_legend <- function(legend, trim_char = FALSE) {
   df
 }
 
-archi_assemble_phyloseq <- function(long, legend = NULL) {
-  long <- long[!archi_host_name(long$name) & !long$taxid %in% c(9606L, 9605L, 33208L), , drop = FALSE]
+archi_assemble_phyloseq <- function(long, legend = NULL, profile_reads = NULL) {
+  ranks <- archi_rank_cols()
+  host_text <- apply(long[, intersect(c("name", ranks), names(long)), drop = FALSE], 1, function(x) {
+    any(archi_host_name(as.character(x)))
+  })
+  long <- long[!host_text & !long$taxid %in% c(9606L, 9605L, 33208L), , drop = FALSE]
   if (!nrow(long)) stop("No taxa left after host/organelle filtering", call. = FALSE)
   long$taxa_id <- paste0("tax_", long$taxid)
   samples <- unique(long$sample)
@@ -150,9 +206,7 @@ archi_assemble_phyloseq <- function(long, legend = NULL) {
   counts <- counts[rowSums(counts) > 0, , drop = FALSE]
   meta_taxa <- long[!duplicated(long$taxa_id), , drop = FALSE]
   meta_taxa <- meta_taxa[match(rownames(counts), meta_taxa$taxa_id), , drop = FALSE]
-  ranks <- archi_rank_cols()
   tax <- meta_taxa[, ranks, drop = FALSE]
-  tax <- fill_na_last_classified(tax, ranks)
   rownames(tax) <- meta_taxa$taxa_id
   tree <- ranks_to_tree(data.frame(
     tax, taxa_id = rownames(tax), taxid = meta_taxa$taxid,
@@ -173,6 +227,10 @@ archi_assemble_phyloseq <- function(long, legend = NULL) {
       }
       legend[colnames(counts), , drop = FALSE]
     }
+  }
+  if (!is.null(profile_reads)) {
+    profile_reads <- profile_reads[colnames(counts)]
+    sam$profile_reads <- as.numeric(profile_reads)
   }
   archi_phyloseq_object(counts, as.matrix(tax), sam, tree)
 }
@@ -223,15 +281,23 @@ kraken_to_phyloseq <- function(path, pattern = "", rank = "G",
     path
   }
   if (!length(files)) stop("No classifier reports matched", call. = FALSE)
-  long <- lapply(files, function(f) {
+  records <- lapply(files, function(f) {
     rec <- read_classifier_report(f, rank = rank)
     if (!isFALSE(trim_char)) {
       rec$sample <- strsplit(rec$sample, trim_char, fixed = TRUE)[[1]][[1]]
     }
     rec
   })
-  long <- do.call(rbind, long)
-  archi_assemble_phyloseq(long, legend = archi_read_legend(legend, trim_char))
+  profile_reads <- vapply(records, function(rec) {
+    val <- attr(rec, "profile_reads")
+    if (is.null(val)) sum(rec$reads) else as.numeric(val)
+  }, numeric(1))
+  names(profile_reads) <- vapply(records, function(rec) as.character(rec$sample[[1]]), character(1))
+  long <- do.call(rbind, records)
+  archi_assemble_phyloseq(
+    long, legend = archi_read_legend(legend, trim_char),
+    profile_reads = profile_reads
+  )
 }
 
 #' Import Kaiju output or a kaiju2table summary as phyloseq

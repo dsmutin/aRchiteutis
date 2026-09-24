@@ -1,0 +1,4 @@
+name	taxonomy_id	taxonomy_lvl	kraken_assigned_reads	added_reads	new_est_reads	fraction_total_reads
+Clostridioides difficile	1496	S	12	356	368	0.00058
+Botrytis cinerea	40559	S	81	0	81	0.00013
+Mycoplasma capricolum	2095	S	25	37	62	0.00010

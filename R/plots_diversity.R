@@ -345,7 +345,7 @@ df2beta <- function(df, clade = "G", dist_function = abdiv::bray_curtis,
         ggplot2::scale_x_discrete(drop = FALSE)
     }
 
-    print(p)
+    if (interactive()) print(p)
     invisible(p)
   }
 

@@ -66,6 +66,15 @@ test_that("beta methods cover vegan distances and Aitchison aDist", {
   expect_builds(suppressMessages(df2beta_pcoa(g, method = "jaccard", add_legend = 7)))
   d <- suppressMessages(df2beta(g, method = "euclidean", print_df = TRUE))
   expect_equal(unname(diag(d)), rep(0, nrow(d)))
+
+  counts <- t(df_untidy(g, amount_from = "N", drop_unclassified = TRUE))
+  expect_equal(
+    unclass(bray),
+    unclass(as.matrix(vegan::vegdist(counts, method = "bray"))),
+    tolerance = 1e-12
+  )
+  expect_warning(chao <- archi_distance_matrix(g, "chao"), NA)
+  expect_true(all(is.finite(chao)))
 })
 
 test_that("df2beta_pcoa returns a buildable ggplot", {

@@ -142,10 +142,10 @@ archi_distance_matrix <- function(df, method = "bray", tree = NULL) {
     if (identical(method, "bray")) return(df_beta_matrix(df, abdiv::bray_curtis))
     stop("Distance '", method, "' needs the vegan package", call. = FALSE)
   }
-  rel <- X
-  rs <- rowSums(rel)
-  rel <- sweep(rel, 1, rs, "/")
-  d <- vegan::vegdist(rel, method = method)
+  # phyloseq delegates these methods to vegan on the count table. In
+  # particular Chao, Cao and Morisita require integer-like counts; converting
+  # every sample to proportions makes those distances meaningless.
+  d <- vegan::vegdist(X, method = method)
   out <- as.matrix(d)
   dimnames(out) <- list(rownames(X), rownames(X))
   out

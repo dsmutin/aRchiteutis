@@ -35,14 +35,16 @@ archi_rarefy_counts <- function(counts, depth) {
 #' @return Integer vector of depths.
 #' @keywords internal
 archi_rarefaction_depths <- function(totals) {
-  max_sum <- as.integer(max(totals, na.rm = TRUE))
+  totals <- totals[is.finite(totals) & totals > 0]
+  max_sum <- if (length(totals)) as.integer(min(totals)) else 0L
   if (!is.finite(max_sum) || max_sum < 1L) {
     stop("Rarefaction needs at least one sample with reads", call. = FALSE)
   }
   grid <- unique(as.integer(c(
     1L, 5L, 10L, 20L, 50L, 100L,
-    seq(200L, min(2000L, max_sum), by = 200L),
-    if (max_sum > 2000L) seq(2500L, max_sum, by = 500L) else integer(0)
+    if (max_sum >= 200L) seq(200L, min(2000L, max_sum), by = 200L) else integer(0),
+    if (max_sum > 2000L) seq(2500L, max_sum, by = 500L) else integer(0),
+    max_sum
   )))
   grid[grid > 0L & grid <= max_sum]
 }
@@ -135,8 +137,8 @@ df2rarefaction <- function(df, split_by = FALSE,
   covered <- tapply(sample_df$Sample, sample_df$Depth, function(s) {
     length(unique(s)) == ncol(mat)
   })
-  vline <- as.integer(names(covered)[covered])
-  if (!length(vline)) vline <- min(sample_df$Depth)
+  common_depths <- as.integer(names(covered)[covered])
+  vline <- if (length(common_depths)) max(common_depths) else min(sample_df$Depth)
 
   sample_df$Measure <- factor(sample_df$Measure, levels = measures)
   p <- ggplot2::ggplot(
@@ -214,8 +216,13 @@ archi_group_lfc <- function(df, group, contrast = NULL) {
     lev <- contrast
   } else if (length(lev) < 2L) {
     stop("df2difftree needs a grouping column with at least two levels", call. = FALSE)
+  } else if (length(lev) > 2L) {
+    stop(
+      "df2difftree found more than two groups; choose exactly two with `contrast`",
+      call. = FALSE
+    )
   } else {
-    lev <- lev[1:2]
+    lev <- lev
   }
   sub <- df[df$group %in% lev, , drop = FALSE]
   means <- dplyr::summarise(sub, m = mean(.data$amount), .by = c("taxa", "group"))

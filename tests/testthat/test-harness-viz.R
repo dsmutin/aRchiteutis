@@ -7,6 +7,7 @@ test_that("rarefaction returns a curve and a replicate table", {
   expect_true(all(c("Sample", "Measure", "Depth", "value") %in% names(long)))
   expect_true(all(long$Depth %in% c(15L, 40L)))
   expect_true(all(is.finite(long$value)))
+  expect_equal(max(archi_rarefaction_depths(c(120L, 350L))), 120L)
 })
 
 test_that("differential tree uses a rank formula, not a binary hclust", {
@@ -19,6 +20,17 @@ test_that("differential tree uses a rank formula, not a binary hclust", {
   expect_lt(max(ape::node.depth(tr)), 20)
   expect_true(any(lengths(split(tr$edge[, 2], tr$edge[, 1])) > 2) ||
                 ape::Ntip(tr) == 3)
+
+  samples <- unique(as.character(sp$sample))
+  groups <- stats::setNames(rep(c("a", "b", "c"), length.out = length(samples)), samples)
+  sp$three_groups <- unname(groups[as.character(sp$sample)])
+  expect_error(
+    df2difftree(sp, group = "three_groups"),
+    "more than two groups"
+  )
+  expect_builds(df2difftree(
+    sp, group = "three_groups", contrast = c("a", "b"), max_tips = 8
+  ))
 })
 
 test_that("heat tree and upset plots build on the bundled reports", {

@@ -5,7 +5,7 @@ description: Draw a differential-abundance tree with aRchiteutis df2difftree. Us
 
 # Differential tree
 
-`df2difftree()` computes log2 fold change between two levels of a grouping column and draws the largest changes on a genus/species formula tree (`ape::as.phylo`, not `hclust`). With `ggtree` and `ggtreeExtra` installed it uses the fruit-bar layout; otherwise it draws a rectangular cladogram.
+`df2difftree()` computes log2 fold change between two levels of a grouping column and draws the largest changes on a genus/species formula tree (`ape::as.phylo`, not `hclust`). With `ggtree` installed the tree uses that layout and a bar at each tip shows the log2 fold change. Otherwise it draws a rectangular cladogram with the same bar. Pass `contrast` when the grouping column has more than two levels.
 
 ```r
 library(aRchiteutis)

@@ -2,11 +2,11 @@
 % Please edit documentation in R/plots_harness.R
 \name{archi_difftree_ggtree}
 \alias{archi_difftree_ggtree}
-\title{Harness ggtree + geom_fruit differential tree}
+\title{ggtree differential tree with a fold-change bar at each tip}
 \usage{
 archi_difftree_ggtree(tree, lfc, layout)
 }
 \description{
-Harness ggtree + geom_fruit differential tree
+ggtree differential tree with a fold-change bar at each tip
 }
 \keyword{internal}

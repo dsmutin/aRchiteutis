@@ -222,7 +222,7 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
     rarefaction = "Observed, Shannon and Simpson rarefaction. Thin line per sample, loess by target.",
     heattree = "Rank tree coloured by mean relative abundance. metacoder::heat_tree when that package and a taxonomy table are available; otherwise a formula tree.",
     upset = "Taxon presence intersections across target levels.",
-    difftree = "Log2 fold change between the first two target levels on a taxonomy tree. ggtree fruit bars when ggtree and ggtreeExtra are installed."
+    difftree = "Log2 fold change between two target levels on a taxonomy tree. ggtree layout when that package is installed; otherwise a rectangular cladogram. A bar at each tip shows the log2 fold change."
   )
 }
 

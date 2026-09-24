@@ -34,10 +34,10 @@ A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Selects the taxa with the largest absolute log2 fold change between two
-groups and draws them on a rank-formula tree. When \pkg{ggtree} and
-\pkg{ggtreeExtra} are installed the harness fruit-bar layout is used
-(circular or rectangular, branch lengths dropped). Otherwise a rectangular
-cladogram plus a log2-fold-change bar is drawn with \pkg{ggplot2}.
+groups and draws them on a rank-formula tree. When \pkg{ggtree} is installed
+the tree uses that layout (circular or rectangular, branch lengths dropped)
+and the log2 fold change is a bar at each tip. Otherwise a rectangular
+cladogram plus the same bar is drawn with \pkg{ggplot2}.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

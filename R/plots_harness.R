@@ -301,10 +301,10 @@ archi_phylo_layout <- function(tree) {
 #' Differential abundance tree (ggtree when installed)
 #'
 #' Selects the taxa with the largest absolute log2 fold change between two
-#' groups and draws them on a rank-formula tree. When \pkg{ggtree} and
-#' \pkg{ggtreeExtra} are installed the harness fruit-bar layout is used
-#' (circular or rectangular, branch lengths dropped). Otherwise a rectangular
-#' cladogram plus a log2-fold-change bar is drawn with \pkg{ggplot2}.
+#' groups and draws them on a rank-formula tree. When \pkg{ggtree} is installed
+#' the tree uses that layout (circular or rectangular, branch lengths dropped)
+#' and the log2 fold change is a bar at each tip. Otherwise a rectangular
+#' cladogram plus the same bar is drawn with \pkg{ggplot2}.
 #'
 #' @param df A tidy table from [get_counts()].
 #' @param group Column index or name with at least two levels (for example the
@@ -346,30 +346,20 @@ df2difftree <- function(df, group, contrast = NULL, max_tips = 20L,
   if (nrow(lfc) < 2L) stop("Tree and taxa share fewer than two tips", call. = FALSE)
   tree <- ape::keep.tip(tree, lfc$id)
 
-  use_ggtree <- layout == "circular" ||
-    (requireNamespace("ggtree", quietly = TRUE) &&
-       requireNamespace("ggtreeExtra", quietly = TRUE))
+  use_ggtree <- requireNamespace("ggtree", quietly = TRUE)
   if (identical(layout, "circular") && !use_ggtree) {
-    stop("Circular df2difftree needs ggtree and ggtreeExtra", call. = FALSE)
+    stop("Circular df2difftree needs ggtree", call. = FALSE)
   }
-  if (use_ggtree && requireNamespace("ggtree", quietly = TRUE) &&
-      requireNamespace("ggtreeExtra", quietly = TRUE)) {
+  if (use_ggtree) {
     return(archi_difftree_ggtree(tree, lfc, layout))
   }
   archi_difftree_ggplot(tree, lfc)
 }
 
-#' Harness ggtree + geom_fruit differential tree
+#' ggtree differential tree with a fold-change bar at each tip
 #' @keywords internal
 archi_difftree_ggtree <- function(tree, lfc, layout) {
-  tip_meta <- data.frame(
-    label = lfc$id,
-    display = lfc$id,
-    is_italic = TRUE,
-    stringsAsFactors = FALSE
-  )
-  fruit <- data.frame(id = lfc$id, log2_lfc = lfc$log2_lfc, stringsAsFactors = FALSE)
-  lim <- max(abs(fruit$log2_lfc), na.rm = TRUE)
+  lim <- max(abs(lfc$log2_lfc), na.rm = TRUE)
   if (!is.finite(lim) || lim <= 0) lim <- 1
   is_circ <- identical(layout, "circular")
   if (is_circ) {
@@ -378,33 +368,24 @@ archi_difftree_ggtree <- function(tree, lfc, layout) {
   } else {
     p <- ggtree::ggtree(tree, layout = "rectangular", branch.length = "none")
   }
-  p <- ggtree::`%<+%`(p, tip_meta)
-  # geom_fruit looks the geom up by name inside the ggtreeExtra namespace,
-  # which does not import geom_col. assignInNamespace cannot create a new
-  # binding, so the locked namespace is opened for this one function.
-  ns <- asNamespace("ggtreeExtra")
-  if (!exists("geom_col", envir = ns, inherits = FALSE)) {
-    rlang::env_unlock(ns)
-    assign("geom_col", ggplot2::geom_col, envir = ns)
-    rlang::env_lock(ns)
-  }
+  tips <- p$data[!is.na(p$data$label) & p$data$label %in% lfc$id, , drop = FALSE]
+  tips$log2_lfc <- lfc$log2_lfc[match(tips$label, lfc$id)]
+  tips <- tips[!is.na(tips$log2_lfc), , drop = FALSE]
+  xmax <- max(p$data$x, na.rm = TRUE)
+  span <- if (is_circ) 0.35 else 0.8
+  gap <- if (is_circ) 0.2 else 0.45
+  tips$xbar <- xmax + gap
+  tips$xend <- tips$xbar + tips$log2_lfc / lim * span
   p +
-    ggtree::geom_tiplab(
-      ggplot2::aes(label = display, subset = is_italic),
-      size = 2.2, offset = if (is_circ) 0.5 else 0.2,
-      align = TRUE, linesize = 0.1, fontface = "italic"
+    ggtree::geom_tiplab(size = 2.2, offset = gap + span + 0.15, fontface = "italic") +
+    ggplot2::geom_segment(
+      data = tips,
+      ggplot2::aes(x = .data$xbar, xend = .data$xend, y = .data$y, yend = .data$y,
+                   colour = .data$log2_lfc),
+      inherit.aes = FALSE, linewidth = 2.2, lineend = "butt"
     ) +
-    ggtreeExtra::geom_fruit(
-      data = fruit,
-      geom = geom_col,
-      mapping = ggplot2::aes(y = id, x = log2_lfc, fill = log2_lfc),
-      offset = if (is_circ) 0 else 0.05,
-      pwidth = if (is_circ) 0.35 else 0.4,
-      axis.params = list(axis = "x", text.size = 1.8, nbreak = 3),
-      grid.params = list()
-    ) +
-    ggplot2::scale_fill_gradient2(
-      low = "#3B4CC0", mid = "white", high = "#B40426",
+    ggplot2::scale_colour_gradient2(
+      low = "#3B4CC0", mid = "grey80", high = "#B40426",
       midpoint = 0, limits = c(-lim, lim), name = "log2 LFC"
     ) +
     ggplot2::theme(legend.position = "right")

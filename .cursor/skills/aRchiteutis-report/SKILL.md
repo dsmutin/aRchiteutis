@@ -39,3 +39,7 @@ TRUE`) instead of disappearing. For a differential tree with more than two
 targets, pass `contrast = c("control", "treatment")`.
 
 Leave the closing line in place: this is a preliminary report only, not a final analysis.
+
+`source = "auto"` sniffs file contents. A Kraken2 directory is not treated as Kaiju because one filename contains `kaiju`.
+
+A saved run on the bundled Kraken2 profiles is `inst/examples/kraken2-report/` (HTML, PDFs, MultiQC custom content). Rebuild it with `Rscript inst/examples/kraken2_report.R`.

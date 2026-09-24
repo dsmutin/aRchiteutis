@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>aRchiteutis preliminary report</title>
+<style>body{font-family:sans-serif;max-width:960px;margin:2rem auto;color:#222}
+img{max-width:100%} table{border-collapse:collapse} td,th{border:1px solid #ccc;padding:4px 8px}</style>
+</head><body>
+<h1>aRchiteutis preliminary report</h1>
+<h2>Dropped samples</h2>
+<p>No samples were removed by the read-count floor or the rarefaction-curve check.</p>
+<h2>composition</h2>
+<p>Stacked composition. Samples ordered by `fpc`. Within-sample abundances rescaled to 0-1.</p>
+<img src="multiqc/archi-composition.png" alt="composition">
+<h2>donut</h2>
+<p>Mean composition across samples, drawn as a donut. Relative abundance.</p>
+<img src="multiqc/archi-donut.png" alt="donut">
+<h2>alpha</h2>
+<p>Shannon and Simpson on counts. Split by target. Geometry: `box`.</p>
+<img src="multiqc/archi-alpha.png" alt="alpha">
+<h2>beta</h2>
+<p>Sample distance heatmap. Method: `bray`. Samples clustered with ward.D2.</p>
+<img src="multiqc/archi-beta.png" alt="beta">
+<h2>rarefaction</h2>
+<p>Observed, Shannon and Simpson rarefaction. Thin line per sample, loess by target.</p>
+<img src="multiqc/archi-rarefaction.png" alt="rarefaction">
+<p><strong>This is a preliminary report only, not a final analysis.</strong></p>
+</body></html>

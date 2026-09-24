@@ -1,0 +1,5 @@
+id: "architeutis-disclaimer"
+section_name: "Preliminary report"
+description: "Draft status"
+plot_type: "html"
+data: "<p>This is a preliminary report only, not a final analysis.</p>"

@@ -379,8 +379,11 @@ archi_difftree_ggtree <- function(tree, lfc, layout) {
     p <- ggtree::ggtree(tree, layout = "rectangular", branch.length = "none")
   }
   p <- ggtree::`%<+%`(p, tip_meta)
-  # geom_fruit matches the symbol `geom_col`, not a namespaced function.
-  geom_col <- ggplot2::geom_col
+  # geom_fruit looks the geom up by name inside the ggtreeExtra namespace,
+  # which does not import geom_col. Put the function there for this call.
+  if (!exists("geom_col", envir = asNamespace("ggtreeExtra"), inherits = FALSE)) {
+    utils::assignInNamespace("geom_col", ggplot2::geom_col, ns = "ggtreeExtra")
+  }
   p +
     ggtree::geom_tiplab(
       ggplot2::aes(label = display, subset = is_italic),

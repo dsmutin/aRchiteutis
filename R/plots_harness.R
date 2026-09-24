@@ -380,9 +380,13 @@ archi_difftree_ggtree <- function(tree, lfc, layout) {
   }
   p <- ggtree::`%<+%`(p, tip_meta)
   # geom_fruit looks the geom up by name inside the ggtreeExtra namespace,
-  # which does not import geom_col. Put the function there for this call.
-  if (!exists("geom_col", envir = asNamespace("ggtreeExtra"), inherits = FALSE)) {
-    utils::assignInNamespace("geom_col", ggplot2::geom_col, ns = "ggtreeExtra")
+  # which does not import geom_col. assignInNamespace cannot create a new
+  # binding, so the locked namespace is opened for this one function.
+  ns <- asNamespace("ggtreeExtra")
+  if (!exists("geom_col", envir = ns, inherits = FALSE)) {
+    rlang::env_unlock(ns)
+    assign("geom_col", ggplot2::geom_col, envir = ns)
+    rlang::env_lock(ns)
   }
   p +
     ggtree::geom_tiplab(

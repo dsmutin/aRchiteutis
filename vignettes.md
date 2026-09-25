@@ -133,7 +133,7 @@ df2tsne(matG, k_means = 10, text_top = 20)
 
 ### `df2volcano` — ANCOM-BC2 log fold change
 
-The first `legend_detect` pattern is the reference group. Requires the optional packages ANCOMBC and phyloseq.
+The first `legend_detect` pattern is the reference group. Requires the optional package ANCOMBC. Older ANCOMBC builds also need phyloseq.
 
 ```r
 df2volcano(df[df$clade == "G", ], legend_detect = c("larvae", "pupa"))

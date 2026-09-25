@@ -518,13 +518,14 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
 #' Volcano plot of ANCOM-BC2 log fold change
 #'
 #' Fits [ANCOMBC::ancombc2] on raw counts (`N`) for the two groups matched by
-#' `legend_detect` (sample names or legend fields). Counts are passed as a
-#' \pkg{phyloseq} object, which ANCOM-BC2 converts to a tree experiment. The
-#' x axis is the bias-corrected log2 fold change of the second group against
-#' the first, and the y axis is `-log10` of the adjusted q-value. Taxa with
-#' no counts in one of the two groups are omitted: ANCOM-BC2 cannot estimate
-#' a sampling variance for them. The function stops when \pkg{ANCOMBC} or
-#' \pkg{phyloseq} is not installed.
+#' `legend_detect` (sample names or legend fields). Current ANCOMBC receives
+#' the count matrix and a sample-metadata data frame. Older ANCOMBC, which
+#' has no `meta_data` argument, receives a \pkg{phyloseq} object instead.
+#' The x axis is the bias-corrected log2 fold change of the second group
+#' against the first, and the y axis is `-log10` of the adjusted q-value.
+#' Taxa with no counts in one of the two groups are omitted: ANCOM-BC2 cannot
+#' estimate a sampling variance for them. The function stops when
+#' \pkg{ANCOMBC} is not installed.
 #'
 #' @param df A tidy `tibble` from [get_counts()] with legend columns.
 #' @param legend_detect Length-2 character vector of patterns identifying the
@@ -540,8 +541,7 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
 #' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 #' df <- get_counts(path = path, pattern = "m(11|12|13|18|4|39)_",
 #'                  legend = legend, trim_char = "_")
-#' if (requireNamespace("ANCOMBC", quietly = TRUE) &&
-#'     requireNamespace("phyloseq", quietly = TRUE)) {
+#' if (requireNamespace("ANCOMBC", quietly = TRUE)) {
 #'   g <- df[df$clade == "G", ]
 #'   keep <- names(sort(tapply(g$N, g$taxa, sum), decreasing = TRUE))[seq_len(30)]
 #'   df2volcano(g[g$taxa %in% keep, ], legend_detect = c("larvae", "pupa"))
@@ -552,7 +552,6 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
 df2volcano <- function(df, legend_detect, treshhold_logAC = 0.5,
                        treshhold_p = 0.05) {
   archi_optional("ANCOMBC", "df2volcano")
-  archi_optional("phyloseq", "df2volcano")
   if (length(legend_detect) != 2L) {
     stop("legend_detect must name two groups", call. = FALSE)
   }
@@ -619,33 +618,9 @@ archi_ancombc_volcano <- function(df, legend_detect) {
     ifelse(colnames(mat) %in% grouped$samples1, legend_detect[[1]], legend_detect[[2]]),
     levels = legend_detect
   )
-  sam <- phyloseq::sample_data(data.frame(
-    group = group, row.names = colnames(mat), stringsAsFactors = FALSE
-  ))
   fit <- NULL
   for (attempt in seq_len(8L)) {
-    ps <- phyloseq::phyloseq(
-      phyloseq::otu_table(mat, taxa_are_rows = TRUE), sam
-    )
-    fit <- tryCatch(
-      ANCOMBC::ancombc2(
-        data = ps,
-        fix_formula = "group",
-        p_adj_method = "fdr",
-        prv_cut = 0.1,
-        lib_cut = 0,
-        group = "group",
-        struc_zero = FALSE,
-        neg_lb = FALSE,
-        pseudo = 0,
-        pseudo_sens = FALSE,
-        global = FALSE,
-        pairwise = FALSE,
-        verbose = FALSE,
-        n_cl = 1L
-      ),
-      error = function(e) e
-    )
+    fit <- tryCatch(archi_ancombc_fit(mat, group), error = function(e) e)
     if (!inherits(fit, "error")) break
     msg <- conditionMessage(fit)
     if (!grepl("Zero variances have been detected", msg, fixed = TRUE)) {
@@ -674,6 +649,46 @@ archi_ancombc_volcano <- function(df, legend_detect) {
     q = as.numeric(res[[q_col]]),
     stringsAsFactors = FALSE
   )
+}
+
+#' Call ancombc2 with a count matrix, or phyloseq on older ANCOMBC
+#' @keywords internal
+archi_ancombc_fit <- function(mat, group) {
+  meta <- data.frame(
+    group = group, row.names = colnames(mat), stringsAsFactors = FALSE
+  )
+  formals_nms <- names(formals(ANCOMBC::ancombc2))
+  args <- list(
+    fix_formula = "group",
+    p_adj_method = "fdr",
+    prv_cut = 0.1,
+    lib_cut = 0,
+    group = "group",
+    struc_zero = FALSE,
+    neg_lb = FALSE,
+    pseudo = 0,
+    pseudo_sens = FALSE,
+    global = FALSE,
+    pairwise = FALSE,
+    verbose = FALSE,
+    n_cl = 1L
+  )
+  args <- args[names(args) %in% formals_nms]
+  # Current ANCOMBC turns a phyloseq object into abundances via microbiome,
+  # which is only a Suggests of ANCOMBC and is absent in a clean check.
+  # A count matrix plus meta_data skips that path.
+  if ("meta_data" %in% formals_nms) {
+    args$data <- mat
+    args$meta_data <- meta
+    if ("taxa_are_rows" %in% formals_nms) args$taxa_are_rows <- TRUE
+  } else {
+    archi_optional("phyloseq", "df2volcano")
+    args$data <- phyloseq::phyloseq(
+      phyloseq::otu_table(mat, taxa_are_rows = TRUE),
+      phyloseq::sample_data(meta)
+    )
+  }
+  do.call(ANCOMBC::ancombc2, args)
 }
 
 #' Samples matching two legend patterns

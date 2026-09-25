@@ -22,21 +22,21 @@ A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Fits \link[ANCOMBC:ancombc2]{ANCOMBC::ancombc2} on raw counts (\code{N}) for the two groups matched by
-\code{legend_detect} (sample names or legend fields). Counts are passed as a
-\pkg{phyloseq} object, which ANCOM-BC2 converts to a tree experiment. The
-x axis is the bias-corrected log2 fold change of the second group against
-the first, and the y axis is \code{-log10} of the adjusted q-value. Taxa with
-no counts in one of the two groups are omitted: ANCOM-BC2 cannot estimate
-a sampling variance for them. The function stops when \pkg{ANCOMBC} or
-\pkg{phyloseq} is not installed.
+\code{legend_detect} (sample names or legend fields). Current ANCOMBC receives
+the count matrix and a sample-metadata data frame. Older ANCOMBC, which
+has no \code{meta_data} argument, receives a \pkg{phyloseq} object instead.
+The x axis is the bias-corrected log2 fold change of the second group
+against the first, and the y axis is \code{-log10} of the adjusted q-value.
+Taxa with no counts in one of the two groups are omitted: ANCOM-BC2 cannot
+estimate a sampling variance for them. The function stops when
+\pkg{ANCOMBC} is not installed.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")
 legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 df <- get_counts(path = path, pattern = "m(11|12|13|18|4|39)_",
                  legend = legend, trim_char = "_")
-if (requireNamespace("ANCOMBC", quietly = TRUE) &&
-    requireNamespace("phyloseq", quietly = TRUE)) {
+if (requireNamespace("ANCOMBC", quietly = TRUE)) {
   g <- df[df$clade == "G", ]
   keep <- names(sort(tapply(g$N, g$taxa, sum), decreasing = TRUE))[seq_len(30)]
   df2volcano(g[g$taxa \%in\% keep, ], legend_detect = c("larvae", "pupa"))

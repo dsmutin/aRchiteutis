@@ -57,6 +57,7 @@ Suggests:
     qiime2R,
     reticulate,
     robCompositions,
+    SummarizedExperiment,
     testthat (>= 3.0.0),
     vegan,
     withr

@@ -551,7 +551,7 @@ archi_geom_fruit <- function(data = NULL, mapping, offset, pwidth,
 archi_position_boxx <- function() {
   ggplot2::ggproto(
     NULL,
-    getFromNamespace("PositionIdentityx", "ggtreeExtra"),
+    utils::getFromNamespace("PositionIdentityx", "ggtreeExtra"),
     compute_layer = function(self, data, params, layout) {
       if (!is.na(params$hexpand)) {
         for (col in c(
@@ -1226,7 +1226,9 @@ archi_parse_phyloseq <- function(ps, to_relative = TRUE) {
   # parse_phyloseq looks it up from the metacoder namespace and misses it
   # until the package is attached.
   if (!"package:metacoder" %in% search()) {
-    suppressPackageStartupMessages(library("metacoder"))
+    # Attach so ranks_ref is on the search path. library() is a check warning
+    # for a suggested package; attachNamespace runs the same hook.
+    attachNamespace(loadNamespace("metacoder"))
   }
   tryCatch(metacoder::parse_phyloseq(ps), error = function(e) NULL)
 }

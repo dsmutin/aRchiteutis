@@ -654,8 +654,13 @@ archi_ancombc_volcano <- function(df, legend_detect) {
 #' Call ancombc2 with a count matrix, or phyloseq on older ANCOMBC
 #' @keywords internal
 archi_ancombc_fit <- function(mat, group) {
+  # ANCOMBC subsets with meta_data[samples, ]. A one-column data.frame
+  # drops to a vector, so the group column disappears. Keep a second column.
   meta <- data.frame(
-    group = group, row.names = colnames(mat), stringsAsFactors = FALSE
+    sample = colnames(mat),
+    group = group,
+    row.names = colnames(mat),
+    stringsAsFactors = FALSE
   )
   formals_nms <- names(formals(ANCOMBC::ancombc2))
   args <- list(

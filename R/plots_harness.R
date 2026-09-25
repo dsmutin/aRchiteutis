@@ -595,7 +595,10 @@ archi_set_palette <- function(n) {
 #' Builds a metacoder taxmap and draws [metacoder::heat_tree]. Node size is
 #' the number of taxa under the node (`n_obs`). Colour is mean relative
 #' abundance. There is no ggplot fallback: the function stops when
-#' \pkg{metacoder} is not installed.
+#' \pkg{metacoder} is not installed. Empty ranks are dropped and their
+#' children reattached, as [metacoder::parse_phyloseq] does, so the graph is
+#' one tree. A `root` node is added only when the ranks would otherwise be a
+#' forest (for example genus and species parsed from labels alone).
 #'
 #' @param df A tidy table from [get_counts()].
 #' @param tax Optional data frame with rank columns (`kingdom` … `species` or
@@ -646,33 +649,41 @@ df2heattree <- function(df, tax = NULL, top = 20L) {
 #'
 #' Relative abundance is the tidy `amount` column (mean across samples stored
 #' as `total`, matching the harness heat tree). `leaf` is the summed relative
-#' abundance.
+#' abundance. The taxonomy graph is one tree: empty ranks are removed the way
+#' [metacoder::parse_phyloseq] drops taxa named `"NA"`, and a single `root`
+#' node is added when the remaining ranks would otherwise be a forest.
 #'
 #' @keywords internal
 archi_taxmap_abundance <- function(df, tax) {
   tax <- archi_heattree_taxonomy(df, tax)
-  rank_cols <- intersect(
-    c("kingdom", "phylum", "class", "order", "family", "genus", "species",
-      "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"),
-    names(tax)
-  )
-  if (length(rank_cols) < 2L) stop("tax needs at least two rank columns", call. = FALSE)
   tax <- tax[tax$taxa %in% unique(as.character(df$taxa)), , drop = FALSE]
   if (nrow(tax) < 2L) stop("Taxonomy and the table share fewer than two taxa", call. = FALSE)
-  input <- tax[, rank_cols, drop = FALSE]
   mat <- df_untidy(df, amount_from = "amount", drop_unclassified = TRUE)
-  idx <- match(tax$taxa, rownames(mat))
+  archi_taxmap_from_matrix(tax, mat)
+}
+
+#' Build a connected Taxmap from a rank table and a taxa-by-sample matrix
+#' @keywords internal
+archi_taxmap_from_matrix <- function(tax, mat) {
+  prep <- archi_connect_ranks(tax)
+  tax <- prep$tax
+  rank_cols <- prep$rank_cols
+  idx <- match(as.character(tax$taxa), rownames(mat))
   abund <- matrix(
     0, nrow = nrow(tax), ncol = ncol(mat),
     dimnames = list(NULL, colnames(mat))
   )
   matched <- !is.na(idx)
   abund[matched, ] <- mat[idx[matched], , drop = FALSE]
-  input <- cbind(input, as.data.frame(abund, check.names = FALSE))
-  sample_cols <- colnames(mat)
+  input <- cbind(tax[, rank_cols, drop = FALSE], as.data.frame(abund, check.names = FALSE))
   obj <- metacoder::parse_tax_data(
     input, class_cols = rank_cols, named_by_rank = TRUE
   )
+  # parse_phyloseq does this: drop "NA" nodes and reattach their children,
+  # so a missing rank does not split the tree into a forest.
+  obj <- archi_taxmap_drop_na_names(obj)
+  archi_assert_taxmap_tree(obj)
+  sample_cols <- colnames(mat)
   obj$data$taxon_counts <- metacoder::calc_taxon_abund(
     obj, data = "tax_data", cols = sample_cols
   )
@@ -681,6 +692,75 @@ archi_taxmap_abundance <- function(df, tax) {
   obj$data$taxon_counts$total <- rowMeans(mat_tc)
   obj$data$taxon_counts$leaf <- rowSums(mat_tc)
   obj
+}
+
+#' One shared root, and no all-empty rank columns
+#' @keywords internal
+archi_connect_ranks <- function(tax) {
+  preferred <- c(
+    "kingdom", "phylum", "class", "order", "family", "genus", "species"
+  )
+  rank_cols <- names(tax)[tolower(names(tax)) %in% preferred]
+  rank_cols <- rank_cols[order(match(tolower(rank_cols), preferred))]
+  if (!length(rank_cols)) stop("tax needs at least one rank column", call. = FALSE)
+  for (col in rank_cols) {
+    x <- as.character(tax[[col]])
+    x[is.na(x) | !nzchar(x) | x == "NA"] <- NA_character_
+    tax[[col]] <- x
+  }
+  nonempty <- vapply(rank_cols, function(col) any(!is.na(tax[[col]])), logical(1))
+  rank_cols <- rank_cols[nonempty]
+  if (!length(rank_cols)) stop("tax has no rank names", call. = FALSE)
+  first <- tax[[rank_cols[[1]]]]
+  if (length(unique(stats::na.omit(first))) != 1L || anyNA(first)) {
+    tax$root <- "root"
+    rank_cols <- c("root", rank_cols)
+  }
+  list(tax = tax, rank_cols = rank_cols)
+}
+
+#' Drop taxa named NA and reattach their children, as parse_phyloseq does
+#' @keywords internal
+archi_taxmap_drop_na_names <- function(obj) {
+  nms <- obj$taxon_names()
+  keep <- !is.na(nms) & nzchar(nms) & nms != "NA"
+  if (all(keep)) return(obj)
+  obj$filter_taxa(keep)
+}
+
+#' The taxonomy graph is one tree: a single root and one parent per node
+#' @keywords internal
+archi_assert_taxmap_tree <- function(obj) {
+  ids <- as.character(obj$taxon_ids())
+  nms <- obj$taxon_names()
+  if (length(nms) != length(ids) || any(is.na(nms) | !nzchar(nms) | nms == "NA")) {
+    stop("Taxonomy graph still contains NA nodes", call. = FALSE)
+  }
+  # roots() is an index into taxon_ids(), not a taxon id. edge_list stores
+  # the root as from = NA, so that row is not a second parent.
+  root_idx <- obj$roots()
+  if (length(root_idx) != 1L || anyNA(root_idx) || root_idx < 1L || root_idx > length(ids)) {
+    stop(
+      "Taxonomy graph has ", length(root_idx),
+      " roots; a heat tree needs one connected tree",
+      call. = FALSE
+    )
+  }
+  root_id <- ids[[root_idx]]
+  el <- obj$edge_list
+  from <- as.character(el$from)
+  to <- as.character(el$to)
+  real <- !is.na(el$from)
+  if (any(!from[real] %in% ids) || any(!to %in% ids)) {
+    stop("Taxonomy graph has an edge to a missing node", call. = FALSE)
+  }
+  children <- to[real]
+  tips <- setdiff(ids, root_id)
+  if (length(children) != length(tips) || any(duplicated(children)) ||
+      !setequal(children, tips)) {
+    stop("Taxonomy graph is not a tree: a node is missing a parent or has two", call. = FALSE)
+  }
+  invisible(obj)
 }
 
 #' Rank table for a heat tree, parsed from labels when `tax` is missing
@@ -699,4 +779,72 @@ archi_heattree_taxonomy <- function(df, tax) {
   if (!"taxa" %in% names(tax)) tax$taxa <- rownames(tax)
   tax$taxa <- as.character(tax$taxa)
   tax
+}
+
+#' Convert a phyloseq object to a metacoder Taxmap
+#'
+#' Same conversion as the harness `phyloseq2metacoder` skill. A real
+#' `phyloseq` object goes through [metacoder::parse_phyloseq] (that function
+#' only sees `ranks_ref` after \pkg{metacoder} is attached). An
+#' `archi_phyloseq` list, and any result that is still a forest, is parsed
+#' from the rank table. Empty ranks are removed and children are reattached,
+#' and a `root` node is added when the ranks do not already share one parent.
+#' The returned graph is one tree.
+#'
+#' @param physeq A `phyloseq` object or an `archi_phyloseq` list.
+#' @param to_relative Logical. Divide each sample by its total before parsing,
+#'   as the harness does.
+#'
+#' @return A `Taxmap`.
+#'
+#' @examples
+#' path <- system.file("extdata", package = "aRchiteutis")
+#' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
+#' if (requireNamespace("metacoder", quietly = TRUE)) {
+#'   ps <- kraken_to_phyloseq(path, pattern = "m1[12]_", legend = legend,
+#'                            trim_char = "_", rank = "G")
+#'   phyloseq_to_metacoder(ps)
+#' }
+#'
+#' @export
+phyloseq_to_metacoder <- function(physeq, to_relative = TRUE) {
+  archi_optional("metacoder", "phyloseq_to_metacoder")
+  if (inherits(physeq, "phyloseq")) {
+    obj <- archi_parse_phyloseq(physeq, to_relative = to_relative)
+    if (!is.null(obj) && length(obj$roots()) == 1L &&
+        !any(obj$taxon_names() == "NA", na.rm = TRUE)) {
+      return(obj)
+    }
+  }
+  parts <- .unpack_phyloseq(physeq)
+  if (is.null(parts$tax)) stop("phyloseq_to_metacoder needs a taxonomy table", call. = FALSE)
+  tax <- as.data.frame(parts$tax, stringsAsFactors = FALSE)
+  if (!"taxa" %in% names(tax)) tax$taxa <- rownames(tax)
+  mat <- as.matrix(parts$otu)
+  if (isTRUE(to_relative)) {
+    totals <- colSums(mat)
+    totals[!is.finite(totals) | totals <= 0] <- NA_real_
+    mat <- sweep(mat, 2, totals, "/")
+    mat[!is.finite(mat)] <- 0
+  }
+  archi_taxmap_from_matrix(tax, mat)
+}
+
+#' parse_phyloseq, after attaching metacoder so ranks_ref is visible
+#' @keywords internal
+archi_parse_phyloseq <- function(ps, to_relative = TRUE) {
+  if (!requireNamespace("phyloseq", quietly = TRUE)) return(NULL)
+  if (isTRUE(to_relative)) {
+    ps <- phyloseq::transform_sample_counts(ps, function(x) {
+      s <- sum(x)
+      if (!is.finite(s) || s <= 0) x else x / s
+    })
+  }
+  # ranks_ref is created on the search path by metacoder's attach hook.
+  # parse_phyloseq looks it up from the metacoder namespace and misses it
+  # until the package is attached.
+  if (!"package:metacoder" %in% search()) {
+    suppressPackageStartupMessages(library("metacoder"))
+  }
+  tryCatch(metacoder::parse_phyloseq(ps), error = function(e) NULL)
 }

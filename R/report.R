@@ -220,7 +220,7 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
       beta_method
     ),
     rarefaction = "Observed, Shannon and Simpson rarefaction. Thin line per sample, loess by target.",
-    heattree = "metacoder heat tree. Node size is the number of taxa; colour is mean relative abundance. Requires the optional metacoder package.",
+    heattree = "metacoder heat tree. Node size is the number of taxa; colour is mean relative abundance. Empty ranks are dropped so the taxonomy is one tree. Requires the optional metacoder package.",
     upset = "Taxon presence intersections across target levels, drawn with ComplexUpset. Requires the optional ComplexUpset package.",
     difftree = "Log2 fold change between two target levels on a ggtree layout. A ggtreeExtra fruit bar at each tip shows the log2 fold change. engine = \"metacoder\" uses metacoder::heat_tree and requires the optional metacoder package."
   )

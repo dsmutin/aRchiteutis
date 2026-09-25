@@ -23,7 +23,10 @@ The plot returned by \link[metacoder:heat_tree]{metacoder::heat_tree}.
 Builds a metacoder taxmap and draws \link[metacoder:heat_tree]{metacoder::heat_tree}. Node size is
 the number of taxa under the node (\code{n_obs}). Colour is mean relative
 abundance. There is no ggplot fallback: the function stops when
-\pkg{metacoder} is not installed.
+\pkg{metacoder} is not installed. Empty ranks are dropped and their
+children reattached, as \link[metacoder:parse_phyloseq]{metacoder::parse_phyloseq} does, so the graph is
+one tree. A \code{root} node is added only when the ranks would otherwise be a
+forest (for example genus and species parsed from labels alone).
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

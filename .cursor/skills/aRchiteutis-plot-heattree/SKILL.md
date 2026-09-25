@@ -5,7 +5,7 @@ description: Draw a taxonomic heat tree with aRchiteutis df2heattree. Use for me
 
 # Heat tree
 
-`df2heattree()` is only `metacoder::heat_tree`. Node size is the number of taxa and colour is mean relative abundance. It stops when metacoder is not installed. There is no ggplot tree. Pass `tax` with Linnaean columns when the tidy labels are not already genus and species.
+`df2heattree()` is only `metacoder::heat_tree`. Node size is the number of taxa and colour is mean relative abundance. It stops when metacoder is not installed. There is no ggplot tree. The taxonomy graph is one tree: empty ranks are removed and their children reattached, the same way `metacoder::parse_phyloseq` drops taxa named `"NA"`. A `root` node is added only when the ranks would otherwise be a forest. Pass `tax` with Linnaean columns, or convert a phyloseq object with `phyloseq_to_metacoder()`, when the tidy labels are not already a full lineage.
 
 ```r
 library(aRchiteutis)

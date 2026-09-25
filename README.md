@@ -108,7 +108,7 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 ### Taxonomy
 
-`df2heattree()` — metacoder heat tree. Node size is the number of taxa, colour is mean relative abundance. The function stops when \pkg{metacoder} is not installed.
+`df2heattree()` — metacoder heat tree. Node size is the number of taxa, colour is mean relative abundance. Empty ranks are dropped and their children reattached, so the taxonomy is one tree. The function stops when \pkg{metacoder} is not installed.
 
 <img src="img/heattree.png" alt="Taxonomic heat tree" width="720">
 

@@ -79,3 +79,56 @@ test_that("metacoder heat tree receives a taxon_id abundance table", {
   )
   expect_no_error(df2heattree(g[g$taxa %in% taxa, ], tax = tax))
 })
+
+test_that("metacoder taxonomy is one connected tree", {
+  skip_if_not_installed("metacoder")
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  taxa <- unique(as.character(g$taxa))[seq_len(8)]
+  g <- g[g$taxa %in% taxa, ]
+  tax <- data.frame(
+    taxa = taxa,
+    kingdom = "Bacteria",
+    phylum = rep(c("Firmicutes", "Proteobacteria"), length.out = 8),
+    class = c("Bacilli", NA, "Gammaproteobacteria", NA, "Bacilli",
+              "Gammaproteobacteria", "Bacilli", NA),
+    genus = taxa,
+    species = NA_character_,
+    stringsAsFactors = FALSE
+  )
+  obj <- aRchiteutis:::archi_taxmap_abundance(g, tax)
+  expect_silent(aRchiteutis:::archi_assert_taxmap_tree(obj))
+  expect_false(any(obj$taxon_names() == "NA", na.rm = TRUE))
+  expect_false("root" %in% obj$taxon_names())
+
+  tax$kingdom[seq_len(4)] <- "Archaea"
+  two <- aRchiteutis:::archi_taxmap_abundance(g, tax)
+  expect_silent(aRchiteutis:::archi_assert_taxmap_tree(two))
+  expect_true("root" %in% two$taxon_names())
+
+  bare <- aRchiteutis:::archi_taxmap_abundance(g, NULL)
+  expect_silent(aRchiteutis:::archi_assert_taxmap_tree(bare))
+  expect_length(bare$roots(), 1L)
+
+  ps <- kraken_to_phyloseq(
+    system.file("extdata", package = "aRchiteutis"),
+    pattern = "m(11|18)_",
+    legend = system.file("extdata", "legend.csv", package = "aRchiteutis"),
+    trim_char = "_", rank = "G"
+  )
+  converted <- phyloseq_to_metacoder(ps)
+  expect_silent(aRchiteutis:::archi_assert_taxmap_tree(converted))
+  expect_equal(sum(converted$n_supertaxa() == 0), 1)
+  expect_equal(unname(converted$taxon_names()[converted$roots()]), "Bacteria")
+
+  ps_s <- kraken_to_phyloseq(
+    system.file("extdata", package = "aRchiteutis"),
+    pattern = "m(11|18)_",
+    legend = system.file("extdata", "legend.csv", package = "aRchiteutis"),
+    trim_char = "_", rank = "S"
+  )
+  species <- phyloseq_to_metacoder(ps_s)
+  expect_silent(aRchiteutis:::archi_assert_taxmap_tree(species))
+  expect_equal(unname(species$taxon_names()[species$roots()]), "Bacteria")
+  expect_false(any(species$taxon_names() == "NA", na.rm = TRUE))
+})

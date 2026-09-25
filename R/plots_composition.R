@@ -185,10 +185,12 @@ df2barplot <- function(df, ..., style = c("box", "raincloud")) {
 
 #' Taxonomic composition on a fan tree
 #'
-#' A fan cladogram drawn with \pkg{ggtree}, tip colour marking a higher rank,
-#' and a \pkg{ggtreeExtra} boxplot ring of per-sample relative abundance. The
-#' layout is the ggtreeExtra fruit-boxplot example (itself built on ggtree):
-#' `layout = "fan"`, `open.angle = 10`, then [ggtree::rotate_tree()].
+#' A fan tree drawn with \pkg{ggtree}, tip colour marking a higher rank, and a
+#' \pkg{ggtreeExtra} boxplot ring of per-sample relative abundance. The layout
+#' follows the ggtreeExtra fruit-boxplot example: `layout = "fan"`,
+#' `open.angle = 10`, [ggtree::rotate_tree()], then [ggtreeExtra::geom_fruit]
+#' with [ggplot2::geom_boxplot] (`y` is the tip, `group` is the tip label,
+#' `fill` is the rank).
 #'
 #' @param df A tidy table from [get_counts()].
 #' @param tax Optional rank table with a `taxa` column (or row names) matching
@@ -228,40 +230,56 @@ df2composition_tree <- function(df, tax = NULL, color_rank = "phylum", top = 25L
   df <- df[df$taxa %in% means$taxa, , drop = FALSE]
   built <- archi_composition_tree(df, tax, color_rank)
   archi_prepare_ggtree()
-  p <- ggtree::ggtree(built$tree, layout = "fan", open.angle = 10, branch.length = "none")
-  p <- ggtree::`%<+%`(p, built$meta)
+  # Same layout as the ggtreeExtra fruit-boxplot example: fan, tip colour by
+  # a higher rank, then a boxplot ring of per-sample abundance.
+  rank_col <- built$rank_title
+  meta <- built$meta
+  names(meta)[names(meta) == "rank_color"] <- rank_col
+  p <- ggtree::ggtree(built$tree, layout = "fan", open.angle = 10)
+  p <- ggtree::`%<+%`(p, meta)
   p <- p + ggtree::geom_tippoint(
-    ggplot2::aes(color = .data$rank_color), size = 1.5, show.legend = FALSE
+    ggplot2::aes(color = .data[[rank_col]]), size = 1.5, show.legend = FALSE
   )
   p <- suppressMessages(ggtree::rotate_tree(p, -90))
-  boxes <- dplyr::summarise(
-    df, val = mean(.data$amount) * 100, .by = c("taxa", "sample")
+  boxes <- data.frame(
+    OTU = as.character(df$taxa),
+    val = as.numeric(df$amount) * 100,
+    stringsAsFactors = FALSE
   )
-  boxes <- boxes[boxes$taxa %in% built$tree$tip.label, , drop = FALSE]
-  levels <- unique(built$meta$rank_color)
-  pal <- stats::setNames(viridis::viridis(length(levels)), levels)
+  boxes <- boxes[boxes$OTU %in% built$tree$tip.label & is.finite(boxes$val), ,
+                 drop = FALSE]
+  # geom_fruit joins on the tree column `label` and drops that name. A data
+  # function keeps `label` so group = label is one box per tip, and the rank
+  # column (Phylum in the example) stays available for fill.
+  fruit_data <- function(plot_data) {
+    tips <- plot_data[plot_data$isTip, , drop = FALSE]
+    out <- merge(boxes, tips, by.x = "OTU", by.y = "label")
+    out$label <- out$OTU
+    out
+  }
+  legend_name <- if (identical(rank_col, "Phylum")) "Phyla" else rank_col
   p +
     archi_geom_fruit(
-      data = boxes,
-      mapping = ggplot2::aes(
-        y = taxa, x = val, group = taxa, fill = rank_color
-      ),
-      offset = 0.12,
-      pwidth = 0.45,
+      data = fruit_data,
+      mapping = rlang::inject(ggplot2::aes(
+        y = OTU,
+        x = val,
+        group = label,
+        fill = !!rlang::sym(rank_col)
+      )),
+      offset = 0.03,
+      pwidth = 0.2,
       geom = ggplot2::geom_boxplot,
       geomname = "geom_boxplot",
-      position = archi_position_boxx(),
-      linewidth = 0.2,
+      size = 0.2,
       outlier.size = 0.5,
       outlier.stroke = 0.08,
       outlier.shape = 21
     ) +
-    ggplot2::scale_fill_manual(
-      values = pal, name = built$rank_title,
+    ggplot2::scale_fill_discrete(
+      name = legend_name,
       guide = ggplot2::guide_legend(keywidth = 0.8, keyheight = 0.8, ncol = 1)
     ) +
-    ggplot2::scale_color_manual(values = pal, guide = "none") +
-    ggplot2::xlab("Relative abundance (%)") +
     ggplot2::theme(
       legend.title = ggplot2::element_text(size = 9),
       legend.text = ggplot2::element_text(size = 7)

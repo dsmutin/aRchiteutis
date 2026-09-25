@@ -22,10 +22,12 @@ column exists, otherwise genus.}
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
-A fan cladogram drawn with \pkg{ggtree}, tip colour marking a higher rank,
-and a \pkg{ggtreeExtra} boxplot ring of per-sample relative abundance. The
-layout is the ggtreeExtra fruit-boxplot example (itself built on ggtree):
-\code{layout = "fan"}, \code{open.angle = 10}, then \code{\link[ggtree:rotate_tree]{ggtree::rotate_tree()}}.
+A fan tree drawn with \pkg{ggtree}, tip colour marking a higher rank, and a
+\pkg{ggtreeExtra} boxplot ring of per-sample relative abundance. The layout
+follows the ggtreeExtra fruit-boxplot example: \code{layout = "fan"},
+\code{open.angle = 10}, \code{\link[ggtree:rotate_tree]{ggtree::rotate_tree()}}, then \link[ggtreeExtra:geom_fruit]{ggtreeExtra::geom_fruit}
+with \link[ggplot2:geom_boxplot]{ggplot2::geom_boxplot} (\code{y} is the tip, \code{group} is the tip label,
+\code{fill} is the rank).
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

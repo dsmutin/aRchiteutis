@@ -131,10 +131,12 @@ df2tsne(matG, k_means = 10, text_top = 20)
 
 <img src="img/tsne.png" alt="df2tsne" width="640">
 
-### `df2volcano` — log-amount change between groups
+### `df2volcano` — ANCOM-BC2 log fold change
+
+The first `legend_detect` pattern is the reference group. Requires the optional package ANCOMBC. Older ANCOMBC builds also need phyloseq.
 
 ```r
-df2volcano(df[df$clade == "G", ], legend_detect = c("pupa", "larvae"))
+df2volcano(df[df$clade == "G", ], legend_detect = c("larvae", "pupa"))
 ```
 
 <img src="img/volcano.png" alt="df2volcano" width="420"><img src="img/volcano1.png" alt="df2volcano (second dataset)" width="420">

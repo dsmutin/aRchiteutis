@@ -62,7 +62,8 @@ fraction between \code{curve_fraction} depth and full depth are dropped
 \item{curve_reps}{Replicates used by the curve check.}
 
 \item{plots}{Character vector of plot ids. Any of \code{composition}, \code{donut},
-\code{barplot}, \code{alpha}, \code{beta}, \code{rarefaction}, \code{heattree}, \code{upset}, \code{difftree}.}
+\code{barplot}, \code{alpha}, \code{beta}, \code{rarefaction}, \code{composition_tree}, \code{heattree},
+\code{upset}, \code{difftree}.}
 
 \item{beta_method}{Name passed to \code{\link[=df2beta]{df2beta()}}, including phyloseq distances
 and \code{"aitchison"} when the matching package is installed.}

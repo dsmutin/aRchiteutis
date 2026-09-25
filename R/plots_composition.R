@@ -182,3 +182,128 @@ df2barplot <- function(df, ..., style = c("box", "raincloud")) {
       axis.text.y = ggplot2::element_text(size = 8, face = "italic"),
       plot.margin = ggplot2::margin(8, 12, 8, 8))
 }
+
+#' Taxonomic composition on a fan tree
+#'
+#' A fan cladogram drawn with \pkg{ggtree}, tip colour marking a higher rank,
+#' and a \pkg{ggtreeExtra} boxplot ring of per-sample relative abundance. The
+#' layout is the ggtreeExtra fruit-boxplot example (itself built on ggtree):
+#' `layout = "fan"`, `open.angle = 10`, then [ggtree::rotate_tree()].
+#'
+#' @param df A tidy table from [get_counts()].
+#' @param tax Optional rank table with a `taxa` column (or row names) matching
+#'   `df$taxa`, plus Linnaean columns. When `NULL`, genus and species are
+#'   parsed from the labels and tips are coloured by genus.
+#' @param color_rank Rank used to colour tips and boxes. `"phylum"` when that
+#'   column exists, otherwise genus.
+#' @param top Integer. Most abundant taxa to keep.
+#'
+#' @return A [ggplot2::ggplot] object.
+#'
+#' @references
+#' Yu G, Smith DK, Zhu H, Guan Y, Lam TTY (2017). "ggtree: an R package for
+#' visualization and annotation of phylogenetic trees with their covariates
+#' and other associated data." *Methods in Ecology and Evolution*, 8, 28–36.
+#' \doi{10.1111/2041-210X.12628}
+#'
+#' Xu S, Dai Z, Guo P, Fu X, Liu S, Zhou L, Tang W, Feng T, Chen M, Zhan L,
+#' Wu T, Hu E, Jiang Y, Bo X, Yu G (2021). "ggtreeExtra: Compact Visualization
+#' of Richly Annotated Phylogenetic Data." *Molecular Biology and Evolution*,
+#' 38, 4039–4042. \doi{10.1093/molbev/msab166}
+#'
+#' @examples
+#' path <- system.file("extdata", package = "aRchiteutis")
+#' df <- get_counts(path = path, pattern = "m1[124]_", trim_char = "_")
+#' df2composition_tree(df[df$clade == "G", ], top = 12)
+#'
+#' @export
+#' @importFrom rlang .data
+df2composition_tree <- function(df, tax = NULL, color_rank = "phylum", top = 25L) {
+  if (is.null(df)) stop("df2composition_tree needs a tidy table", call. = FALSE)
+  df <- df_tidy_drop_unclassified(df)
+  means <- dplyr::summarise(df, m = mean(.data$amount), .by = "taxa")
+  means <- means[order(-means$m), , drop = FALSE]
+  means <- utils::head(means, min(as.integer(top), nrow(means)))
+  if (nrow(means) < 2L) stop("df2composition_tree needs at least two taxa", call. = FALSE)
+  df <- df[df$taxa %in% means$taxa, , drop = FALSE]
+  built <- archi_composition_tree(df, tax, color_rank)
+  archi_prepare_ggtree()
+  p <- ggtree::ggtree(built$tree, layout = "fan", open.angle = 10, branch.length = "none")
+  p <- ggtree::`%<+%`(p, built$meta)
+  p <- p + ggtree::geom_tippoint(
+    ggplot2::aes(color = .data$rank_color), size = 1.5, show.legend = FALSE
+  )
+  p <- suppressMessages(ggtree::rotate_tree(p, -90))
+  boxes <- dplyr::summarise(
+    df, val = mean(.data$amount) * 100, .by = c("taxa", "sample")
+  )
+  boxes <- boxes[boxes$taxa %in% built$tree$tip.label, , drop = FALSE]
+  levels <- unique(built$meta$rank_color)
+  pal <- stats::setNames(viridis::viridis(length(levels)), levels)
+  p +
+    archi_geom_fruit(
+      data = boxes,
+      mapping = ggplot2::aes(
+        y = taxa, x = val, group = taxa, fill = rank_color
+      ),
+      offset = 0.12,
+      pwidth = 0.45,
+      geom = ggplot2::geom_boxplot,
+      geomname = "geom_boxplot",
+      position = archi_position_boxx(),
+      linewidth = 0.2,
+      outlier.size = 0.5,
+      outlier.stroke = 0.08,
+      outlier.shape = 21
+    ) +
+    ggplot2::scale_fill_manual(
+      values = pal, name = built$rank_title,
+      guide = ggplot2::guide_legend(keywidth = 0.8, keyheight = 0.8, ncol = 1)
+    ) +
+    ggplot2::scale_color_manual(values = pal, guide = "none") +
+    ggplot2::xlab("Relative abundance (%)") +
+    ggplot2::theme(
+      legend.title = ggplot2::element_text(size = 9),
+      legend.text = ggplot2::element_text(size = 7)
+    )
+}
+
+#' Fan-tree tips and the rank used to colour them
+#' @keywords internal
+archi_composition_tree <- function(df, tax, color_rank) {
+  labels <- unique(as.character(df$taxa))
+  labels <- labels[!is.na(labels) & nzchar(labels)]
+  if (is.null(tax)) {
+    genus <- ifelse(grepl(" ", labels), sub(" .*", "", labels), labels)
+    meta <- data.frame(
+      label = labels, rank_color = genus, stringsAsFactors = FALSE
+    )
+    return(list(tree = archi_label_tree(labels), meta = meta, rank_title = "Genus"))
+  }
+  tax <- as.data.frame(tax, stringsAsFactors = FALSE)
+  if (!"taxa" %in% names(tax)) tax$taxa <- rownames(tax)
+  tax$taxa <- as.character(tax$taxa)
+  names(tax) <- tolower(names(tax))
+  tax <- tax[tax$taxa %in% labels, , drop = FALSE]
+  ranks <- intersect(archi_rank_cols(), names(tax))
+  color_rank <- tolower(color_rank)
+  if (!color_rank %in% names(tax) || all(is.na(tax[[color_rank]]) | !nzchar(tax[[color_rank]]))) {
+    color_rank <- if ("genus" %in% names(tax)) "genus" else ranks[[length(ranks)]]
+  }
+  if (length(ranks) >= 2L && nrow(tax) >= 2L) {
+    tax$tip_name <- tax$taxa
+    tree <- ranks_to_tree(tax)
+  } else {
+    tree <- archi_label_tree(intersect(labels, tax$taxa))
+  }
+  color <- as.character(tax[[color_rank]][match(tree$tip.label, tax$taxa)])
+  missing <- is.na(color) | !nzchar(color)
+  color[missing] <- ifelse(
+    grepl(" ", tree$tip.label[missing]),
+    sub(" .*", "", tree$tip.label[missing]),
+    tree$tip.label[missing]
+  )
+  meta <- data.frame(label = tree$tip.label, rank_color = color, stringsAsFactors = FALSE)
+  title <- paste0(toupper(substr(color_rank, 1, 1)), substr(color_rank, 2, nchar(color_rank)))
+  list(tree = tree, meta = meta, rank_title = title)
+}

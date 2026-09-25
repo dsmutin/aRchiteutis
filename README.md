@@ -82,6 +82,10 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 `df2barplot()` — amount per taxon. `style = "raincloud"` draws a ggviolinbox raincloud.
 
+`df2composition_tree()` — fan cladogram from [ggtree](https://doi.org/10.1111/2041-210X.12628) (Yu et al. 2017) with a [ggtreeExtra](https://doi.org/10.1093/molbev/msab166) boxplot of relative abundance (Xu et al. 2021). Tips and boxes are coloured by phylum when a rank table is available.
+
+<img src="img/composition_tree.png" alt="Fan tree of composition" width="720">
+
 <img src="img/barplot_raincloud.png" alt="Raincloud of taxon amounts" width="720">
 
 ### Diversity
@@ -112,9 +116,13 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/heattree.png" alt="Taxonomic heat tree" width="720">
 
-`df2difftree()` — log2 fold change between two groups on a ggtree layout, with a \pkg{ggtreeExtra} fruit bar at each tip. With more than two groups, pass `contrast`. `engine = "metacoder"` draws the same fold changes with `metacoder::heat_tree` and stops when that package is not installed.
+`df2difftree()` — log2 fold change between two groups on a ggtree layout. The default fruit is a heatmap of relative abundance; tip colour is the fold change. `fruit = "bar"` draws the fold change as a column. With more than two groups, pass `contrast`. `engine = "metacoder"` draws `metacoder::heat_tree` and stops when that package is not installed. `engine = "microbiota"` runs MicrobiotaProcess `mp_diff_analysis` and stops when that package is not installed.
 
 <img src="img/difftree.png" alt="Differential abundance tree" width="720">
+
+`engine = "microbiota"` draws the MicrobiotaProcess biomarker tree (radial ggtree, phylum highlight, abundance stars, LDA and FDR) when that package is installed.
+
+<img src="img/difftree_microbiota.png" alt="MicrobiotaProcess differential tree" width="720">
 
 `df2upset()` — taxon presence as a ComplexUpset plot. The function stops when \pkg{ComplexUpset} is not installed.
 
@@ -148,7 +156,7 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/tsne.png" alt="t-SNE of taxa" width="720">
 
-`df2volcano()` — log abundance change between two legend groups.
+`df2volcano()` — ANCOM-BC2 log2 fold change against adjusted q. The first `legend_detect` pattern is the reference group. The function stops when \pkg{ANCOMBC} is not installed.
 
 <img src="img/volcano.png" alt="Volcano plot" width="720">
 

@@ -515,92 +515,206 @@ df2tsne <- function(df, color = "clust", k_means = 10, text_top = FALSE,
     ggplot2::theme(plot.margin = ggplot2::margin(14, 14, 14, 14))
 }
 
-#' Volcano plot of abundance change between two sample groups
+#' Volcano plot of ANCOM-BC2 log fold change
 #'
-#' Runs a per-taxon t-test between the two groups defined by `legend_detect` and
-#' plots the log abundance change against the t-test p-value.
+#' Fits [ANCOMBC::ancombc2] on raw counts (`N`) for the two groups matched by
+#' `legend_detect` (sample names or legend fields). Current ANCOMBC receives
+#' the count matrix and a sample-metadata data frame. Older ANCOMBC, which
+#' has no `meta_data` argument, receives a \pkg{phyloseq} object instead.
+#' The x axis is the bias-corrected log2 fold change of the second group
+#' against the first, and the y axis is `-log10` of the adjusted q-value.
+#' Taxa with no counts in one of the two groups are omitted: ANCOM-BC2 cannot
+#' estimate a sampling variance for them. The function stops when
+#' \pkg{ANCOMBC} is not installed.
 #'
 #' @param df A tidy `tibble` from [get_counts()] with legend columns.
 #' @param legend_detect Length-2 character vector of patterns identifying the
-#'   two groups.
-#' @param treshhold_logAC Numeric. Absolute log abundance-change threshold for
+#'   two groups. The first pattern is the ANCOM-BC reference level.
+#' @param treshhold_logAC Numeric. Absolute log2 fold-change threshold for
 #'   labelling.
-#' @param treshhold_p Numeric. P-value threshold for labelling.
+#' @param treshhold_p Numeric. Adjusted q-value threshold for labelling.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
 #' @examples
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
-#' df <- get_counts(path = path, pattern = "m[1345][0-9]?_", legend = legend,
-#'                  trim_char = "_")
-#' df2volcano(df[df$clade == "G", ], legend_detect = c("pupa", "larvae"))
+#' df <- get_counts(path = path, pattern = "m(11|12|13|18|4|39)_",
+#'                  legend = legend, trim_char = "_")
+#' if (requireNamespace("ANCOMBC", quietly = TRUE)) {
+#'   g <- df[df$clade == "G", ]
+#'   keep <- names(sort(tapply(g$N, g$taxa, sum), decreasing = TRUE))[seq_len(30)]
+#'   df2volcano(g[g$taxa %in% keep, ], legend_detect = c("larvae", "pupa"))
+#' }
 #'
 #' @export
 #' @importFrom rlang .data
 df2volcano <- function(df, legend_detect, treshhold_logAC = 0.5,
                        treshhold_p = 0.05) {
+  archi_optional("ANCOMBC", "df2volcano")
+  if (length(legend_detect) != 2L) {
+    stop("legend_detect must name two groups", call. = FALSE)
+  }
+  res <- archi_ancombc_volcano(df, legend_detect)
+  res$neglog10q <- -log10(pmax(res$q, .Machine$double.xmin))
+  res$diffexpressed <- "NS"
+  ok <- !is.na(res$log2_lfc) & !is.na(res$q)
+  res$diffexpressed[ok & res$q < treshhold_p & res$log2_lfc >= treshhold_logAC] <- "Up"
+  res$diffexpressed[ok & res$q < treshhold_p & res$log2_lfc <= -treshhold_logAC] <- "Down"
+  res$label <- res$taxa
+  res$label[res$diffexpressed == "NS"] <- NA_character_
 
-  df_un <- df %>% df_untidy(keep_sample_name = FALSE)
-  df1 <- df_un[, stringr::str_detect(colnames(df_un), legend_detect[1]),
-               drop = FALSE]
-  df2 <- df_un[, stringr::str_detect(colnames(df_un), legend_detect[2]),
-               drop = FALSE]
+  ggplot2::ggplot(res, ggplot2::aes(.data$log2_lfc, .data$neglog10q,
+                                    color = .data$diffexpressed)) +
+    ggplot2::geom_point(alpha = 0.75, size = 1.6) +
+    ggplot2::geom_hline(yintercept = -log10(treshhold_p), linetype = 2,
+                        linewidth = 0.3) +
+    ggplot2::geom_vline(xintercept = c(-treshhold_logAC, treshhold_logAC),
+                        linetype = 2, linewidth = 0.3) +
+    ggrepel::geom_text_repel(
+      ggplot2::aes(label = .data$label), size = 2.4, max.overlaps = 15,
+      show.legend = FALSE, na.rm = TRUE, seed = 1
+    ) +
+    ggplot2::scale_color_manual(
+      values = c(Up = "#D81B60", Down = "#1B9E77", NS = "grey70"),
+      name = NULL
+    ) +
+    ggplot2::labs(
+      x = expression(log[2]~fold~change),
+      y = expression(-log[10]~adjusted~italic(q))
+    ) +
+    ggplot2::theme_bw(base_size = 11) +
+    ggplot2::theme(legend.position = "top")
+}
 
-  t_df <- vapply(seq_len(nrow(df_un)), function(i) {
-    if ((sum(df1[i, ]) != 0) && (sum(df2[i, ]) != 0)) {
-      tryCatch(stats::t.test(df1[i, ], df2[i, ], paired = FALSE)$p.value,
-               error = function(e) NA_real_)
-    } else {
-      NA_real_
+#' ANCOM-BC2 log2 fold change for two legend groups
+#' @keywords internal
+archi_ancombc_volcano <- function(df, legend_detect) {
+  grouped <- archi_legend_groups(df, legend_detect)
+  if (length(grouped$samples1) < 2L || length(grouped$samples2) < 2L) {
+    stop(
+      "ANCOM-BC2 needs at least two samples in each group (found ",
+      length(grouped$samples1), " and ", length(grouped$samples2), ")",
+      call. = FALSE
+    )
+  }
+  keep <- c(grouped$samples1, grouped$samples2)
+  sub <- df[as.character(df$sample) %in% keep, , drop = FALSE]
+  mat <- df_untidy(sub, amount_from = "N", drop_unclassified = TRUE)
+  mat <- mat[, intersect(keep, colnames(mat)), drop = FALSE]
+  mat <- round(mat)
+  mat[mat < 0 | !is.finite(mat)] <- 0
+  storage.mode(mat) <- "integer"
+  in1 <- colnames(mat) %in% grouped$samples1
+  # A taxon missing from an entire group has a zero sampling variance, and
+  # ANCOM-BC2 stops in the bias step. Keep taxa seen in both groups.
+  seen <- rowSums(mat[, in1, drop = FALSE] > 0) > 0 &
+    rowSums(mat[, !in1, drop = FALSE] > 0) > 0
+  mat <- mat[seen & apply(mat, 1, stats::var) > 0, , drop = FALSE]
+  if (nrow(mat) < 2L) {
+    stop("ANCOM-BC2 needs taxa present in both groups", call. = FALSE)
+  }
+  group <- factor(
+    ifelse(colnames(mat) %in% grouped$samples1, legend_detect[[1]], legend_detect[[2]]),
+    levels = legend_detect
+  )
+  fit <- NULL
+  for (attempt in seq_len(8L)) {
+    fit <- tryCatch(archi_ancombc_fit(mat, group), error = function(e) e)
+    if (!inherits(fit, "error")) break
+    msg <- conditionMessage(fit)
+    if (!grepl("Zero variances have been detected", msg, fixed = TRUE)) {
+      stop(msg, call. = FALSE)
     }
-  }, numeric(1))
+    inner <- sub(".*following taxa:\\s*", "", msg)
+    inner <- sub("\\s*Please remove these taxa.*", "", inner)
+    bad <- trimws(strsplit(inner, ",\\s*")[[1]])
+    bad <- bad[nzchar(bad)]
+    mat <- mat[!rownames(mat) %in% bad, , drop = FALSE]
+    if (nrow(mat) < 2L || !length(bad)) stop(msg, call. = FALSE)
+  }
+  if (inherits(fit, "error")) stop(conditionMessage(fit), call. = FALSE)
+  res <- fit$res
+  if (is.null(res) || !nrow(res)) stop("ANCOM-BC2 returned no taxa", call. = FALSE)
+  lfc_col <- grep("^lfc_", names(res), value = TRUE)
+  lfc_col <- setdiff(lfc_col, "lfc_(Intercept)")
+  if (!length(lfc_col)) stop("ANCOM-BC2 returned no log-fold-change column", call. = FALSE)
+  term <- sub("^lfc_", "", lfc_col[[1]])
+  q_col <- paste0("q_", term)
+  if (!q_col %in% names(res)) q_col <- paste0("p_", term)
+  taxon <- if ("taxon" %in% names(res)) res$taxon else res[[1]]
+  data.frame(
+    taxa = as.character(taxon),
+    log2_lfc = as.numeric(res[[lfc_col[[1]]]]),
+    q = as.numeric(res[[q_col]]),
+    stringsAsFactors = FALSE
+  )
+}
 
-  t_df <- data.frame(taxa = row.names(df_un),
-                     p = -log10(t_df),
-                     sd = apply(df_un, 1, stats::sd))
+#' Call ancombc2 with a count matrix, or phyloseq on older ANCOMBC
+#' @keywords internal
+archi_ancombc_fit <- function(mat, group) {
+  # ANCOMBC subsets with meta_data[samples, ]. A one-column data.frame
+  # drops to a vector, so the group column disappears. Keep a second column.
+  meta <- data.frame(
+    sample = colnames(mat),
+    group = group,
+    row.names = colnames(mat),
+    stringsAsFactors = FALSE
+  )
+  formals_nms <- names(formals(ANCOMBC::ancombc2))
+  args <- list(
+    fix_formula = "group",
+    p_adj_method = "fdr",
+    prv_cut = 0.1,
+    lib_cut = 0,
+    group = "group",
+    struc_zero = FALSE,
+    neg_lb = FALSE,
+    pseudo = 0,
+    pseudo_sens = FALSE,
+    global = FALSE,
+    pairwise = FALSE,
+    verbose = FALSE,
+    n_cl = 1L
+  )
+  args <- args[names(args) %in% formals_nms]
+  # Current ANCOMBC turns a phyloseq object into abundances via microbiome,
+  # which is only a Suggests of ANCOMBC and is absent in a clean check.
+  # A count matrix plus meta_data skips that path.
+  if ("meta_data" %in% formals_nms) {
+    args$data <- mat
+    args$meta_data <- meta
+    if ("taxa_are_rows" %in% formals_nms) args$taxa_are_rows <- TRUE
+  } else {
+    archi_optional("phyloseq", "df2volcano")
+    args$data <- phyloseq::phyloseq(
+      phyloseq::otu_table(mat, taxa_are_rows = TRUE),
+      phyloseq::sample_data(meta)
+    )
+  }
+  do.call(ANCOMBC::ancombc2, args)
+}
 
-  df_str <- apply(df[, -c(1:6)], 1,
-                  function(z) stringr::str_c(z, collapse = "_"))
-  df1mean <- dplyr::summarise(
-    df[stringr::str_detect(df_str, legend_detect[1]), ],
-    x = mean(amount), .by = "taxa")
-  df2mean <- dplyr::summarise(
-    df[stringr::str_detect(df_str, legend_detect[2]), ],
-    y = mean(amount), .by = "taxa")
-
-  res <- as.data.frame(
-    dplyr::left_join(dplyr::full_join(df1mean, df2mean, by = "taxa"),
-                     t_df, by = "taxa"))
-  res[is.na(res)] <- 0
-  res$logAC <- log10(res$y / res$x)
-  res$logAC[!is.finite(res$logAC)] <- NA_real_
-  res$p[!is.finite(res$p)] <- NA_real_
-
-  res$taxa[(abs(res$logAC) < treshhold_logAC) |
-             (res$p < -log10(treshhold_p))] <- NA
-
-  ggplot2::ggplot(res, ggplot2::aes(.data$logAC, .data$p)) +
-    ggplot2::geom_point(ggplot2::aes(color = abs(.data$logAC * .data$p),
-                                     size = .data$x + .data$y),
-                        show.legend = FALSE) +
-    ggplot2::geom_hline(yintercept = -log10(treshhold_p), linetype = 3,
-                        alpha = 0.5, color = "red") +
-    ggplot2::geom_vline(xintercept = treshhold_logAC, linetype = 3,
-                        alpha = 0.5, color = "red") +
-    ggplot2::geom_vline(xintercept = -treshhold_logAC, linetype = 3,
-                        alpha = 0.5, color = "red") +
-    ggrepel::geom_label_repel(ggplot2::aes(label = .data$taxa),
-                              size = 2.8, max.overlaps = 25,
-                              box.padding = 0.4, min.segment.length = 0,
-                              seed = 1, na.rm = TRUE) +
-    ggplot2::scale_color_gradient("logAC", high = "blue", low = "gray",
-                                  na.value = "blue") +
-    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.08)) +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = 0.08)) +
-    ggplot2::coord_cartesian(clip = "off") +
-    ggplot2::xlab("log10 amount change") +
-    ggplot2::ylab("p-value by t.test") +
-    ggplot2::theme_minimal(base_size = 11) +
-    ggplot2::theme(plot.margin = ggplot2::margin(14, 14, 14, 14))
+#' Samples matching two legend patterns
+#' @keywords internal
+archi_legend_groups <- function(df, legend_detect) {
+  meta_cols <- setdiff(names(df), c(
+    "taxa", "clade", "sample", "N", "amount", "amount_cl"
+  ))
+  samples <- unique(as.character(df$sample))
+  if (length(meta_cols)) {
+    meta <- unique(df[, c("sample", meta_cols), drop = FALSE])
+    key <- apply(meta[, meta_cols, drop = FALSE], 1, function(z) paste(z, collapse = "_"))
+    names(key) <- as.character(meta$sample)
+  } else {
+    key <- stats::setNames(samples, samples)
+  }
+  key[is.na(key)] <- ""
+  samples1 <- names(key)[stringr::str_detect(key, legend_detect[[1]]) |
+                            stringr::str_detect(names(key), legend_detect[[1]])]
+  samples2 <- names(key)[stringr::str_detect(key, legend_detect[[2]]) |
+                            stringr::str_detect(names(key), legend_detect[[2]])]
+  samples2 <- setdiff(samples2, samples1)
+  list(samples1 = unique(samples1), samples2 = unique(samples2))
 }

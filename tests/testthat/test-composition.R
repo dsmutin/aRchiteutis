@@ -17,6 +17,13 @@ test_that("composition bars default to an FPC sample order", {
   }
 })
 
+test_that("composition tree is a ggtree fan with abundance boxes", {
+  dfT <- archi_df_nosp()
+  p <- df2composition_tree(dfT, top = 8)
+  expect_builds(p)
+  expect_s3_class(p, "ggtree")
+})
+
 test_that("df2composition returns a buildable ggplot", {
   dfT <- suppressMessages(df_taxa_trim(archi_df_nosp(), top_taxa = 8))
   expect_builds(df2composition(dfT))

@@ -34,6 +34,7 @@ test_that("differential tree uses a rank formula, not a binary hclust", {
   expect_builds(df2difftree(
     sp, group = "three_groups", contrast = c("a", "b"), max_tips = 8
   ))
+  expect_builds(df2difftree(sp, group = "stage", max_tips = 8, fruit = "bar"))
 })
 
 test_that("heat tree and upset plots build on the bundled reports", {
@@ -45,6 +46,35 @@ test_that("heat tree and upset plots build on the bundled reports", {
   p <- df2upset(g, group = "stage", min_size = 1)
   expect_s3_class(p, "ggplot")
   expect_no_error(withr::with_pdf(tempfile(fileext = ".pdf"), print(p)))
+})
+
+test_that("microbiota difftree builds a ggtree on the bundled reports", {
+  skip_if_not_installed("MicrobiotaProcess")
+  skip_if_not_installed("ggstar")
+  skip_if_not_installed("phyloseq")
+  df <- get_counts(
+    extdata_path(),
+    pattern = "m(11|12|13|18|4|39)_",
+    legend = file.path(extdata_path(), "legend.csv"),
+    trim_char = "_"
+  )
+  g <- df[df$clade == "G", ]
+  p <- df2difftree(
+    g, group = "stage", contrast = c("larvae", "pupa"),
+    engine = "microbiota", max_tips = 30
+  )
+  expect_s3_class(p, "ggtree")
+  expect_builds(p)
+})
+
+test_that("microbiota difftree stops without MicrobiotaProcess", {
+  skip_if(requireNamespace("MicrobiotaProcess", quietly = TRUE))
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_error(
+    df2difftree(g, group = "stage", engine = "microbiota"),
+    "MicrobiotaProcess"
+  )
 })
 
 test_that("heat tree and metacoder difftree stop without metacoder", {

@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots_ordination.R
 \name{df2volcano}
 \alias{df2volcano}
-\title{Volcano plot of abundance change between two sample groups}
+\title{Volcano plot of ANCOM-BC2 log fold change}
 \usage{
 df2volcano(df, legend_detect, treshhold_logAC = 0.5, treshhold_p = 0.05)
 }
@@ -10,25 +10,36 @@ df2volcano(df, legend_detect, treshhold_logAC = 0.5, treshhold_p = 0.05)
 \item{df}{A tidy \code{tibble} from \code{\link[=get_counts]{get_counts()}} with legend columns.}
 
 \item{legend_detect}{Length-2 character vector of patterns identifying the
-two groups.}
+two groups. The first pattern is the ANCOM-BC reference level.}
 
-\item{treshhold_logAC}{Numeric. Absolute log abundance-change threshold for
+\item{treshhold_logAC}{Numeric. Absolute log2 fold-change threshold for
 labelling.}
 
-\item{treshhold_p}{Numeric. P-value threshold for labelling.}
+\item{treshhold_p}{Numeric. Adjusted q-value threshold for labelling.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
-Runs a per-taxon t-test between the two groups defined by \code{legend_detect} and
-plots the log abundance change against the t-test p-value.
+Fits \link[ANCOMBC:ancombc2]{ANCOMBC::ancombc2} on raw counts (\code{N}) for the two groups matched by
+\code{legend_detect} (sample names or legend fields). Current ANCOMBC receives
+the count matrix and a sample-metadata data frame. Older ANCOMBC, which
+has no \code{meta_data} argument, receives a \pkg{phyloseq} object instead.
+The x axis is the bias-corrected log2 fold change of the second group
+against the first, and the y axis is \code{-log10} of the adjusted q-value.
+Taxa with no counts in one of the two groups are omitted: ANCOM-BC2 cannot
+estimate a sampling variance for them. The function stops when
+\pkg{ANCOMBC} is not installed.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")
 legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
-df <- get_counts(path = path, pattern = "m[1345][0-9]?_", legend = legend,
-                 trim_char = "_")
-df2volcano(df[df$clade == "G", ], legend_detect = c("pupa", "larvae"))
+df <- get_counts(path = path, pattern = "m(11|12|13|18|4|39)_",
+                 legend = legend, trim_char = "_")
+if (requireNamespace("ANCOMBC", quietly = TRUE)) {
+  g <- df[df$clade == "G", ]
+  keep <- names(sort(tapply(g$N, g$taxa, sum), decreasing = TRUE))[seq_len(30)]
+  df2volcano(g[g$taxa \%in\% keep, ], legend_detect = c("larvae", "pupa"))
+}
 
 }

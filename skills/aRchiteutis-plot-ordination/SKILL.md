@@ -22,7 +22,7 @@ Long-table plots (not untidy):
 
 ```r
 df2clust2d(df[df$clade == "G", ], legend_detect = "pupa", top = 40, k_means = 10)
-df2volcano(df[df$clade == "G", ], legend_detect = c("pupa", "larvae"))
+df2volcano(df[df$clade == "G", ], legend_detect = c("pupa", "larvae"))  # ANCOMBC::ancombc2
 df2pca_sample(
   df_untidy(df, clade = "S", scale = "scale", keep_sample_name = FALSE),
   scale = FALSE, detect = "pupa")

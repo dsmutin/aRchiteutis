@@ -9,6 +9,8 @@ archi_taxmap_abundance(df, tax)
 \description{
 Relative abundance is the tidy \code{amount} column (mean across samples stored
 as \code{total}, matching the harness heat tree). \code{leaf} is the summed relative
-abundance.
+abundance. The taxonomy graph is one tree: empty ranks are removed the way
+\link[metacoder:parse_phyloseq]{metacoder::parse_phyloseq} drops taxa named \code{"NA"}, and a single \code{root}
+node is added when the remaining ranks would otherwise be a forest.
 }
 \keyword{internal}

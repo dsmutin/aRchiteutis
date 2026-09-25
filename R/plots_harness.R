@@ -536,34 +536,18 @@ archi_geom_fruit <- function(data = NULL, mapping, offset, pwidth,
       do.call(geom, args)
     }
   }
+  # geom_fruit chose a position for geom_text. Re-choose it for the real
+  # geom: boxplots need position_dodgex, columns need position_stackx.
   if (!is.null(position)) {
     fruit$params$position <- position
-  } else if (identical(geomname, "geom_col")) {
-    fruit$params$position <- ggtreeExtra::position_stackx()
+  } else {
+    fruit$params$position <- NULL
+    fruit$position <- "auto"
+    fruit <- utils::getFromNamespace("choose_pos", "ggtreeExtra")(fruit)
   }
   extra <- list(...)
   if (length(extra)) fruit$params <- utils::modifyList(fruit$params, extra)
   fruit
-}
-
-#' Horizontal boxplot position that shifts xmin/xmax, not a missing x column
-#' @keywords internal
-archi_position_boxx <- function() {
-  ggplot2::ggproto(
-    NULL,
-    utils::getFromNamespace("PositionIdentityx", "ggtreeExtra"),
-    compute_layer = function(self, data, params, layout) {
-      if (!is.na(params$hexpand)) {
-        for (col in c(
-          "x", "xmin", "xmax", "xlower", "xmiddle", "xupper",
-          "xmin_final", "xmax_final"
-        )) {
-          if (col %in% names(data)) data[[col]] <- data[[col]] + params$hexpand
-        }
-      }
-      data
-    }
-  )
 }
 
 #' MicrobiotaProcess biomarker tree (mp_diff_analysis + ggtree)

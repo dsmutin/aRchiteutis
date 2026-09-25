@@ -222,7 +222,8 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
     rarefaction = "Observed, Shannon and Simpson rarefaction. Thin line per sample, loess by target.",
     heattree = "metacoder heat tree. Node size is the number of taxa; colour is mean relative abundance. Empty ranks are dropped so the taxonomy is one tree. Requires the optional metacoder package.",
     upset = "Taxon presence intersections across target levels, drawn with ComplexUpset. Requires the optional ComplexUpset package.",
-    difftree = "Log2 fold change between two target levels on a ggtree layout. A ggtreeExtra fruit bar at each tip shows the log2 fold change. engine = \"metacoder\" uses metacoder::heat_tree and requires the optional metacoder package."
+    composition_tree = "Fan cladogram (ggtree) with a ggtreeExtra boxplot of relative abundance, coloured by phylum.",
+    difftree = "Log2 fold change between two target levels on a ggtree layout. The default fruit is a heatmap of relative abundance; tip colour is the fold change. engine = \"metacoder\" uses metacoder::heat_tree and requires the optional metacoder package. engine = \"microbiota\" uses MicrobiotaProcess::mp_diff_analysis and requires the optional MicrobiotaProcess package."
   )
 }
 
@@ -256,6 +257,7 @@ archi_report_draw <- function(id, df, tax, target_col, beta_method, order_sample
       df, split_by = "target", depths = rarefaction_depths,
       n_reps = rarefaction_reps, top = top
     ),
+    composition_tree = df2composition_tree(trimmed, tax = tax, top = top),
     heattree = df2heattree(trimmed, tax = tax, top = top),
     upset = df2upset(df, group = "target"),
     difftree = df2difftree(
@@ -400,7 +402,8 @@ archi_write_report_html <- function(path, dropped, sections, disclaimer) {
 #' @param curve_fraction Terminal rarefaction fraction used by the curve check.
 #' @param curve_reps Replicates used by the curve check.
 #' @param plots Character vector of plot ids. Any of `composition`, `donut`,
-#'   `barplot`, `alpha`, `beta`, `rarefaction`, `heattree`, `upset`, `difftree`.
+#'   `barplot`, `alpha`, `beta`, `rarefaction`, `composition_tree`, `heattree`,
+#'   `upset`, `difftree`.
 #' @param beta_method Name passed to [df2beta()], including phyloseq distances
 #'   and `"aitchison"` when the matching package is installed.
 #' @param order_samples Sample order for [df2composition()].

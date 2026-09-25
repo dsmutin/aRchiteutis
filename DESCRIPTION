@@ -46,10 +46,13 @@ Imports:
     utils,
     viridis
 Suggests:
+    ANCOMBC,
     biomformat,
     ComplexUpset,
+    ggstar,
     ggviolinbox,
     metacoder,
+    MicrobiotaProcess,
     phyloseq,
     qiime2R,
     reticulate,

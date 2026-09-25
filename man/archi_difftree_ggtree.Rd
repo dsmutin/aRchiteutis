@@ -2,15 +2,15 @@
 % Please edit documentation in R/plots_harness.R
 \name{archi_difftree_ggtree}
 \alias{archi_difftree_ggtree}
-\title{ggtree differential tree with a fold-change fruit bar at each tip}
+\title{ggtree differential tree}
 \usage{
-archi_difftree_ggtree(tree, lfc, layout)
+archi_difftree_ggtree(tree, lfc, layout, df, groups, fruit)
 }
 \description{
-Same order as the harness \code{plot_diff_ggtree}: cladogram, italic tip labels,
-then \link[ggtreeExtra:geom_fruit]{ggtreeExtra::geom_fruit} columns. ggtreeExtra looks up \code{geom_col} with
-\code{do.call} inside its own namespace, where that geom is not imported, so the
-layer is built from the imported \code{geom_text} name and then swapped for
-\code{ggplot2::geom_col}.
+Default fruit is a heatmap of relative abundance (samples in the two
+groups, or the two group means when there are many samples). Tip colour is
+log2 fold change. \code{fruit = "bar"} keeps a single fold-change column.
+ggtreeExtra looks geoms up with \code{do.call} inside its own namespace, so the
+layer is built from the imported \code{geom_text} name and then swapped.
 }
 \keyword{internal}

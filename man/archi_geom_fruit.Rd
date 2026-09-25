@@ -2,11 +2,24 @@
 % Please edit documentation in R/plots_harness.R
 \name{archi_geom_fruit}
 \alias{archi_geom_fruit}
-\title{Fruit column that ggtreeExtra can construct from inside another package}
+\title{Fruit layer that ggtreeExtra can construct from inside another package}
 \usage{
-archi_geom_fruit(data, mapping, offset, pwidth)
+archi_geom_fruit(
+  data = NULL,
+  mapping,
+  offset,
+  pwidth,
+  geom = ggplot2::geom_col,
+  geomname = "geom_col",
+  position = NULL,
+  ...
+)
 }
 \description{
-Fruit column that ggtreeExtra can construct from inside another package
+\code{geom_text} is imported by ggtreeExtra, so its name check succeeds.
+\code{geom_col}, \code{geom_tile} and \code{geom_boxplot} are not, and \code{do.call} of those
+names inside that namespace fails. The layer is built under the imported
+name and then swapped. \code{axis.params} and \code{grid.params} must be literal
+\code{list()} calls: \code{geom_fruit} captures them with \code{enquo}.
 }
 \keyword{internal}

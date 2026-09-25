@@ -1,6 +1,6 @@
 ---
 name: aRchiteutis-plot-composition
-description: Draw aRchiteutis composition plots (donut, stacked bar, box plot) with df2donut, df2composition, and df2barplot from a tidy count table. Use when the user wants taxonomic composition figures.
+description: Draw aRchiteutis composition plots (donut, stacked bar, box plot, fan tree) with df2donut, df2composition, df2barplot, and df2composition_tree from a tidy count table. Use when the user wants taxonomic composition figures.
 ---
 
 # Composition plots
@@ -16,7 +16,10 @@ df2composition(dfT)                     # samples ordered by FPC (PC1)
 df2composition(dfT, order_samples = "hclust")  # or abundance, alpha, none
 df2barplot(dfC)        # box plot per taxon
 df2barplot(dfC, style = "raincloud")  # needs ggviolinbox
+df2composition_tree(dfC, top = 20)  # ggtree fan + ggtreeExtra abundance boxplots
 ```
+
+`df2composition_tree()` follows the ggtree / ggtreeExtra fruit-boxplot layout (`layout = "fan"`, `open.angle = 10`, `ggtree::rotate_tree()`). Pass `tax` with a `phylum` column to colour tips by phylum; otherwise tips are coloured by genus.
 
 Images: `vignettes.md` (donut, composition, barplot). All three return ggplot objects.
 

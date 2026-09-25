@@ -57,9 +57,26 @@ test_that("df2tsne returns a buildable ggplot", {
   expect_builds(p)
 })
 
-test_that("df2volcano returns a buildable ggplot", {
-  df <- archi_df()
+test_that("df2volcano returns a buildable ANCOM-BC2 ggplot", {
+  skip_if_not_installed("ANCOMBC")
+  df <- get_counts(
+    extdata_path(),
+    pattern = "m(11|12|13|18|4|39)_",
+    legend = file.path(extdata_path(), "legend.csv"),
+    trim_char = "_"
+  )
   g <- df[df$clade == "G", ]
-  expect_builds(suppressMessages(suppressWarnings(
-    df2volcano(g, legend_detect = c("pupa", "larvae")))))
+  keep <- names(sort(tapply(g$N, g$taxa, sum), decreasing = TRUE))[seq_len(40)]
+  p <- df2volcano(g[g$taxa %in% keep, ], legend_detect = c("larvae", "pupa"),
+                  treshhold_logAC = 0.5)
+  expect_builds(p)
+  expect_true("log2_lfc" %in% names(ggplot2::ggplot_build(p)$plot$data) ||
+                "log2_lfc" %in% names(p$data))
+})
+
+test_that("df2volcano stops without ANCOMBC", {
+  skip_if(requireNamespace("ANCOMBC", quietly = TRUE))
+  g <- archi_df()
+  g <- g[g$clade == "G", ]
+  expect_error(df2volcano(g, legend_detect = c("larvae", "pupa")), "ANCOMBC")
 })

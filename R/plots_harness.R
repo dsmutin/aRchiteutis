@@ -260,51 +260,23 @@ archi_label_tree <- function(labels) {
   tr
 }
 
-#' Rectangular layout for a phylo object (tips evenly spaced)
+
+#' Stop when an optional plotting package is missing
 #' @keywords internal
-archi_phylo_layout <- function(tree) {
-  tree <- ape::reorder.phylo(tree, order = "cladewise")
-  tips <- tree$tip.label
-  y <- stats::setNames(seq_along(tips), tips)
-  n_node <- length(tips) + tree$Nnode
-  yy <- numeric(n_node)
-  yy[seq_along(tips)] <- y
-  children <- split(tree$edge[, 2], tree$edge[, 1])
-  for (node in seq.int(n_node, length(tips) + 1L)) {
-    ch <- children[[as.character(node)]]
-    if (is.null(ch)) next
-    yy[node] <- mean(yy[ch])
+archi_optional <- function(pkg, what) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(what, " needs the optional package ", pkg, call. = FALSE)
   }
-  xx <- numeric(n_node)
-  for (i in seq_len(nrow(tree$edge))) {
-    parent <- tree$edge[i, 1]
-    child <- tree$edge[i, 2]
-    xx[child] <- xx[parent] + 1
-  }
-  nodes <- data.frame(
-    node = seq_len(n_node),
-    x = xx,
-    y = yy,
-    label = c(tips, rep(NA_character_, tree$Nnode)),
-    stringsAsFactors = FALSE
-  )
-  edges <- data.frame(
-    x = xx[tree$edge[, 1]],
-    xend = xx[tree$edge[, 2]],
-    y = yy[tree$edge[, 1]],
-    yend = yy[tree$edge[, 2]],
-    stringsAsFactors = FALSE
-  )
-  list(nodes = nodes, edges = edges, tips = tips)
 }
 
-#' Differential abundance tree (ggtree when installed)
+#' Differential abundance tree
 #'
 #' Selects the taxa with the largest absolute log2 fold change between two
-#' groups and draws them on a rank-formula tree. When \pkg{ggtree} is installed
-#' the tree uses that layout (circular or rectangular, branch lengths dropped)
-#' and the log2 fold change is a bar at each tip. Otherwise a rectangular
-#' cladogram plus the same bar is drawn with \pkg{ggplot2}.
+#' groups. The default engine follows the harness ggtree script: a cladogram
+#' (`branch.length = "none"`, circular unless `layout = "rectangular"`) and a
+#' [ggtreeExtra::geom_fruit] bar of log2 fold change at each tip. `engine =
+#' "metacoder"` colours a metacoder heat tree by the same fold change and stops
+#' when \pkg{metacoder} is not installed.
 #'
 #' @param df A tidy table from [get_counts()].
 #' @param group Column index or name with at least two levels (for example the
@@ -312,9 +284,15 @@ archi_phylo_layout <- function(tree) {
 #' @param contrast Character vector of length 2 naming the groups. The fold
 #'   change is `log2(contrast[2] / contrast[1])`.
 #' @param max_tips Integer. How many taxa to keep.
-#' @param layout `"rectangular"` or `"circular"` (circular needs \pkg{ggtree}).
+#' @param layout `"circular"` (default, as in the harness) or `"rectangular"`.
+#'   Ignored when `engine = "metacoder"`.
 #' @param tree Optional [ape::phylo]. Tips must match `taxa` values. When
-#'   `NULL`, a genus/species formula tree is built from the labels.
+#'   `NULL`, a genus/species formula tree is built from the labels. Used only
+#'   by the ggtree engine.
+#' @param engine `"ggtree"` or `"metacoder"`.
+#' @param tax Optional rank table (`kingdom` … `species`, plus `taxa`). Used
+#'   only by the metacoder engine. When `NULL`, genus and species are parsed
+#'   from the taxon labels.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -327,14 +305,23 @@ archi_phylo_layout <- function(tree) {
 #' @export
 #' @importFrom rlang .data
 df2difftree <- function(df, group, contrast = NULL, max_tips = 20L,
-                        layout = c("rectangular", "circular"),
-                        tree = NULL) {
+                        layout = c("circular", "rectangular"),
+                        tree = NULL,
+                        engine = c("ggtree", "metacoder"),
+                        tax = NULL) {
   layout <- match.arg(layout)
+  engine <- match.arg(engine)
   lfc <- archi_group_lfc(df, group, contrast = contrast)
   lfc$abs_lfc <- abs(lfc$log2_lfc)
   lfc <- lfc[order(-lfc$abs_lfc), , drop = FALSE]
   lfc <- utils::head(lfc, min(as.integer(max_tips), nrow(lfc)))
   if (nrow(lfc) < 2L) stop("Need at least two taxa for a differential tree", call. = FALSE)
+
+  if (identical(engine, "metacoder")) {
+    archi_optional("metacoder", "df2difftree(engine = \"metacoder\")")
+    kept <- df[df$taxa %in% lfc$id, , drop = FALSE]
+    return(archi_difftree_metacoder(kept, lfc, tax))
+  }
 
   if (is.null(tree)) {
     tree <- archi_label_tree(lfc$id)
@@ -345,124 +332,172 @@ df2difftree <- function(df, group, contrast = NULL, max_tips = 20L,
   lfc <- lfc[match(keep, lfc$id), , drop = FALSE]
   if (nrow(lfc) < 2L) stop("Tree and taxa share fewer than two tips", call. = FALSE)
   tree <- ape::keep.tip(tree, lfc$id)
-
-  use_ggtree <- requireNamespace("ggtree", quietly = TRUE)
-  if (identical(layout, "circular") && !use_ggtree) {
-    stop("Circular df2difftree needs ggtree", call. = FALSE)
-  }
-  if (use_ggtree) {
-    return(archi_difftree_ggtree(tree, lfc, layout))
-  }
-  archi_difftree_ggplot(tree, lfc)
+  archi_difftree_ggtree(tree, lfc, layout)
 }
 
-#' ggtree differential tree with a fold-change bar at each tip
+#' ggtree differential tree with a fold-change fruit bar at each tip
+#'
+#' Same order as the harness `plot_diff_ggtree`: cladogram, italic tip labels,
+#' then [ggtreeExtra::geom_fruit] columns. ggtreeExtra looks up `geom_col` with
+#' `do.call` inside its own namespace, where that geom is not imported, so the
+#' layer is built from the imported `geom_text` name and then swapped for
+#' `ggplot2::geom_col`.
+#'
 #' @keywords internal
 archi_difftree_ggtree <- function(tree, lfc, layout) {
   lim <- max(abs(lfc$log2_lfc), na.rm = TRUE)
   if (!is.finite(lim) || lim <= 0) lim <- 1
   is_circ <- identical(layout, "circular")
+  tip_offset <- if (is_circ) 0.5 else 0.2
+  fruit_offset <- if (is_circ) 0 else 0.05
+  fruit_pwidth <- if (is_circ) 0.35 else 0.40
+
+  display <- as.character(lfc$id)
+  tip_meta <- data.frame(
+    label = display,
+    display = display,
+    is_italic = grepl(" ", display, fixed = TRUE),
+    stringsAsFactors = FALSE
+  )
+  fruit <- data.frame(
+    id = display,
+    log2_lfc = as.numeric(lfc$log2_lfc),
+    stringsAsFactors = FALSE
+  )
+
+  archi_prepare_ggtree()
   if (is_circ) {
     p <- ggtree::ggtree(tree, layout = "circular", open.angle = 10,
                         branch.length = "none")
   } else {
     p <- ggtree::ggtree(tree, layout = "rectangular", branch.length = "none")
   }
-  tips <- p$data[!is.na(p$data$label) & p$data$label %in% lfc$id, , drop = FALSE]
-  tips$log2_lfc <- lfc$log2_lfc[match(tips$label, lfc$id)]
-  tips <- tips[!is.na(tips$log2_lfc), , drop = FALSE]
-  xmax <- max(p$data$x, na.rm = TRUE)
-  span <- if (is_circ) 0.35 else 0.8
-  gap <- if (is_circ) 0.2 else 0.45
-  tips$xbar <- xmax + gap
-  tips$xend <- tips$xbar + tips$log2_lfc / lim * span
-  p +
-    ggtree::geom_tiplab(size = 2.2, offset = gap + span + 0.15, fontface = "italic") +
-    ggplot2::geom_segment(
-      data = tips,
-      ggplot2::aes(x = .data$xbar, xend = .data$xend, y = .data$y, yend = .data$y,
-                   colour = .data$log2_lfc),
-      inherit.aes = FALSE, linewidth = 2.2, lineend = "butt"
+  p <- ggtree::`%<+%`(p, tip_meta)
+  if (any(tip_meta$is_italic)) {
+    p <- p + ggtree::geom_tiplab(
+      ggplot2::aes(label = display, subset = is_italic),
+      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1,
+      fontface = "italic"
+    )
+  }
+  if (any(!tip_meta$is_italic)) {
+    p <- p + ggtree::geom_tiplab(
+      ggplot2::aes(label = display, subset = !is_italic),
+      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1,
+      fontface = "plain"
+    )
+  }
+  p <- p +
+    archi_geom_fruit(
+      data = fruit,
+      mapping = ggplot2::aes(y = id, x = log2_lfc, fill = log2_lfc),
+      offset = fruit_offset,
+      pwidth = fruit_pwidth
     ) +
-    ggplot2::scale_colour_gradient2(
-      low = "#3B4CC0", mid = "grey80", high = "#B40426",
+    ggplot2::scale_fill_gradient2(
+      low = "#1B9E77", mid = "gray80", high = "#D81B60",
       midpoint = 0, limits = c(-lim, lim), name = "log2 LFC"
     ) +
     ggplot2::theme(legend.position = "right")
+  if (is_circ) {
+    p <- p + ggplot2::expand_limits(x = c(0, 3))
+  } else if (requireNamespace("ggtree", quietly = TRUE) &&
+             exists("hexpand", envir = asNamespace("ggtree"), inherits = FALSE)) {
+    p <- p + ggtree::hexpand(0.85)
+  }
+  p
 }
 
-#' Rectangular differential tree without ggtree
+#' ggplot2 4 renamed is.waive; released ggtree still calls it while drawing
 #' @keywords internal
-archi_difftree_ggplot <- function(tree, lfc) {
-  lay <- archi_phylo_layout(tree)
-  tips <- lay$nodes[!is.na(lay$nodes$label), , drop = FALSE]
-  tips$log2_lfc <- lfc$log2_lfc[match(tips$label, lfc$id)]
-  lim <- max(abs(tips$log2_lfc), na.rm = TRUE)
-  if (!is.finite(lim) || lim <= 0) lim <- 1
-  xmax <- max(lay$nodes$x)
-  # Place the fold-change bar just to the right of the tips.
-  bar_x0 <- xmax + 0.6
-  tips$xbar <- bar_x0
-  tips$xend <- bar_x0 + tips$log2_lfc / lim
-  ggplot2::ggplot() +
-    ggplot2::geom_segment(
-      data = lay$edges,
-      ggplot2::aes(x = .data$x, xend = .data$xend, y = .data$y, yend = .data$yend),
-      linewidth = 0.3, colour = "grey20"
-    ) +
-    ggplot2::geom_segment(
-      data = tips,
-      ggplot2::aes(x = .data$xbar, xend = .data$xend, y = .data$y, yend = .data$y,
-                   colour = .data$log2_lfc),
-      linewidth = 2.4, lineend = "butt"
-    ) +
-    ggplot2::geom_text(
-      data = tips,
-      ggplot2::aes(x = .data$x + 0.08, y = .data$y, label = .data$label),
-      hjust = 0, size = 2.6, fontface = "italic"
-    ) +
-    ggplot2::scale_colour_gradient2(
-      low = "#3B4CC0", mid = "grey90", high = "#B40426",
-      midpoint = 0, limits = c(-lim, lim), name = "log2 LFC"
-    ) +
-    ggplot2::labs(
-      subtitle = paste0("log2(", lfc$group_high[1], " / ", lfc$group_low[1], ")")
-    ) +
-    ggplot2::theme_void(base_size = 11) +
-    ggplot2::theme(
-      legend.position = "bottom",
-      plot.margin = ggplot2::margin(8, 16, 8, 8)
-    )
+archi_prepare_ggtree <- function() {
+  if (exists("is.waive", envir = asNamespace("ggplot2"), inherits = FALSE)) {
+    return(invisible(NULL))
+  }
+  if (!exists("is.waive", mode = "function", inherits = TRUE)) {
+    assign("is.waive", function(x) inherits(x, "waiver"), envir = .GlobalEnv)
+  }
+  invisible(NULL)
 }
 
-#' Presence / absence UpSet bars across groups
+#' Fruit column that ggtreeExtra can construct from inside another package
+#' @keywords internal
+archi_geom_fruit <- function(data, mapping, offset, pwidth) {
+  # geom_text is imported by ggtreeExtra, so its name check succeeds.
+  # geom_col is not, and do.call("geom_col") inside that namespace fails.
+  # axis.params and grid.params must be literal list() calls: geom_fruit
+  # captures them with enquo and does not evaluate a variable.
+  fruit <- ggtreeExtra::geom_fruit(
+    data = data,
+    geom = geom_text,
+    mapping = mapping,
+    offset = offset,
+    pwidth = pwidth,
+    orientation = "y",
+    axis.params = list(
+      axis = "x", text.size = 1.8, hjust = 1, vjust = 0.5, nbreak = 3
+    ),
+    grid.params = list()
+  )
+  fruit$geom <- ggplot2::geom_col
+  fruit$geomname <- "geom_col"
+  fruit$params$position <- ggtreeExtra::position_stackx()
+  fruit
+}
+
+#' metacoder heat tree coloured by log2 fold change
+#' @keywords internal
+archi_difftree_metacoder <- function(df, lfc, tax) {
+  obj <- archi_taxmap_abundance(df, tax)
+  ids <- as.character(metacoder::taxon_ids(obj))
+  nms <- as.character(metacoder::taxon_names(obj))
+  name_of <- stats::setNames(nms, ids)
+  tc <- obj$data$taxon_counts
+  matched <- lfc$log2_lfc[match(unname(name_of[as.character(tc$taxon_id)]), lfc$id)]
+  tc$log2_lfc <- ifelse(is.na(matched), 0, matched)
+  obj$data$taxon_counts <- tc
+  rlang::inject(metacoder::heat_tree(
+    obj,
+    node_label = !!quote(taxon_names),
+    node_size = !!quote(n_obs),
+    node_color = !!quote(log2_lfc),
+    node_size_axis_label = "Taxa",
+    node_color_axis_label = "log2 fold change",
+    node_color_range = c("#1B9E77", "gray", "#D81B60"),
+    layout = "davidson-harel",
+    initial_layout = "reingold-tilford"
+  ))
+}
+
+#' Presence / absence UpSet plot across groups
 #'
 #' A taxon is present in a group when it has a positive count in any sample of
-#' that group (the harness fallback when MicrobiotaProcess is not used). Bars
-#' show intersection sizes; the matrix underneath marks which groups belong to
-#' each intersection.
+#' that group. The drawing is [ComplexUpset::upset], the same plot the harness
+#' script writes. The function stops when \pkg{ComplexUpset} is not installed.
 #'
 #' @param df A tidy table from [get_counts()].
 #' @param group Column index or name.
 #' @param min_size Integer. Drop intersections smaller than this.
 #'
-#' @return A [ggplot2::ggplot] object (a patchwork-free single plot with the
-#'   combination matrix encoded as points under the bars).
+#' @return The plot returned by [ComplexUpset::upset].
 #'
 #' @examples
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")
 #' df <- get_counts(path, pattern = "decont_b", legend = legend, trim_char = "_")
-#' df2upset(df[df$clade == "G", ], group = "stage")
+#' if (requireNamespace("ComplexUpset", quietly = TRUE)) {
+#'   df2upset(df[df$clade == "G", ], group = "stage")
+#' }
 #'
 #' @export
-#' @importFrom rlang .data
 df2upset <- function(df, group, min_size = 1L) {
+  archi_optional("ComplexUpset", "df2upset")
   df <- df_tidy_drop_unclassified(df)
   samples <- unique(as.character(df$sample))
   g <- archi_sample_group(df, group, samples)
   df$group <- unname(g[as.character(df$sample)])
-  sets <- unique(df$group)
+  sets <- unique(as.character(df$group))
+  sets <- sets[!is.na(sets) & nzchar(sets)]
   if (length(sets) < 2L) stop("df2upset needs at least two groups", call. = FALSE)
   mat <- df_untidy(df, amount_from = "N", drop_unclassified = TRUE)
   present <- sapply(sets, function(lv) {
@@ -472,160 +507,196 @@ df2upset <- function(df, group, min_size = 1L) {
   })
   colnames(present) <- sets
   rownames(present) <- rownames(mat)
-  key <- apply(present, 1, function(z) paste(z, collapse = ""))
-  tab <- as.data.frame(table(key), stringsAsFactors = FALSE)
-  names(tab) <- c("key", "size")
-  tab <- tab[tab$size >= as.integer(min_size) & grepl("1", tab$key), , drop = FALSE]
-  tab <- tab[order(-tab$size), , drop = FALSE]
-  if (!nrow(tab)) stop("No shared or private taxa at this min_size", call. = FALSE)
-  tab$combo <- factor(tab$key, levels = rev(tab$key))
-  bits <- do.call(rbind, strsplit(tab$key, ""))
-  storage.mode(bits) <- "integer"
-  colnames(bits) <- sets
-  long <- cbind(combo = tab$combo, as.data.frame(bits), size = tab$size)
-  long <- tidyr::pivot_longer(long, cols = dplyr::all_of(sets),
-                              names_to = "set", values_to = "in_set")
-  long <- long[long$in_set == 1L, , drop = FALSE]
-  # One column per group, to the right of the intersection bars.
-  gap <- max(tab$size) * 0.08
-  long$x <- max(tab$size) * 1.15 + (match(long$set, sets) - 1L) * gap
-  ggplot2::ggplot(tab, ggplot2::aes(x = .data$size, y = .data$combo)) +
-    ggplot2::geom_col(fill = "grey25", width = 0.7) +
-    ggplot2::geom_point(
-      data = long,
-      ggplot2::aes(x = .data$x, y = .data$combo, colour = .data$set),
-      size = 2.4, inherit.aes = FALSE
-    ) +
-    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +
-    ggplot2::scale_colour_manual(
-      values = stats::setNames(viridis::viridis(length(sets)), sets),
-      name = NULL
-    ) +
-    ggplot2::labs(x = "Taxa in intersection", y = NULL) +
-    ggplot2::theme_minimal(base_size = 11) +
-    ggplot2::theme(axis.text.y = ggplot2::element_blank(),
-                   panel.grid.major.y = ggplot2::element_blank())
+  upset_data <- as.data.frame(present, stringsAsFactors = FALSE)
+  upset_data <- upset_data[rowSums(upset_data[, sets, drop = FALSE]) > 0, , drop = FALSE]
+  if (!nrow(upset_data)) stop("No taxa with presence in any group", call. = FALSE)
+
+  set_colors <- archi_set_palette(length(sets))
+  names(set_colors) <- sets
+  queries <- lapply(sets, function(set_name) {
+    ComplexUpset::upset_query(
+      set = set_name,
+      fill = set_colors[[set_name]],
+      only_components = "overall_sizes"
+    )
+  })
+
+  old_theme <- ggplot2::theme_get()
+  on.exit(ggplot2::theme_set(old_theme), add = TRUE)
+  ggplot2::theme_set(ggplot2::theme_minimal() + ggplot2::theme(
+    plot.title = ggplot2::element_blank(),
+    axis.title.x = ggplot2::element_text(),
+    axis.title.y = ggplot2::element_text()
+  ))
+
+  size_label_aes <- ggplot2::aes(
+    label = !!ComplexUpset::get_size_mode("exclusive_intersection")
+  )
+  ComplexUpset::upset(
+    upset_data,
+    intersect = sets,
+    name = "Groups",
+    width_ratio = 0.2,
+    stripes = "white",
+    min_size = as.integer(min_size),
+    base_annotations = list(
+      "Taxa in sets" = (
+        ComplexUpset::intersection_size(
+          bar_number_threshold = 2000,
+          text_mapping = size_label_aes,
+          text = list(check_overlap = TRUE, size = 3)
+        ) +
+          ggplot2::theme(panel.grid = ggplot2::element_blank())
+      )
+    ),
+    set_sizes = (
+      ComplexUpset::upset_set_size() +
+        ggplot2::geom_text(
+          ggplot2::aes(label = ggplot2::after_stat(count)),
+          hjust = 1.1, stat = "count", size = 3
+        ) +
+        ggplot2::scale_y_reverse(n.breaks = 3) +
+        ggplot2::ylab("Taxa sets") +
+        ggplot2::theme(
+          plot.margin = ggplot2::margin(5.5, 5.5, 5.5, (5.5 + 1.2 * 10) * 1.5, unit = "pt")
+        )
+    ),
+    themes = ComplexUpset::upset_modify_themes(list(
+      "intersections_matrix" = ggplot2::theme(
+        axis.text.y = ggplot2::element_text(face = "italic"),
+        axis.title.x = ggplot2::element_text(),
+        axis.title.y = ggplot2::element_blank()
+      ),
+      "overall_sizes" = ggplot2::theme(
+        plot.margin = ggplot2::margin(5.5, 5.5, 5.5, (5.5 + 12) * 1.5, unit = "pt")
+      )
+    )),
+    sort_intersections_by = c("degree", "cardinality"),
+    sort_intersections = "descending",
+    sort_sets = FALSE,
+    queries = queries
+  )
 }
 
-#' Taxonomic heat tree
+#' Set1-like colours for UpSet set-size bars
+#' @keywords internal
+archi_set_palette <- function(n) {
+  n <- as.integer(n)
+  base <- c(
+    "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00",
+    "#FFFF33", "#A65628", "#F781BF", "#999999"
+  )
+  if (n <= length(base)) return(base[seq_len(n)])
+  grDevices::colorRampPalette(base)(n)
+}
+
+#' Taxonomic heat tree (metacoder only)
 #'
-#' Builds a rank tree and colours nodes by mean relative abundance. When
-#' \pkg{metacoder} is installed and `tax` contains Linnaean rank columns, the
-#' harness `metacoder::heat_tree` layout is used. Otherwise nodes of a
-#' genus/species formula tree are drawn with \pkg{ggplot2} (size = abundance).
+#' Builds a metacoder taxmap and draws [metacoder::heat_tree]. Node size is
+#' the number of taxa under the node (`n_obs`). Colour is mean relative
+#' abundance. There is no ggplot fallback: the function stops when
+#' \pkg{metacoder} is not installed.
 #'
-#' @param df A tidy table from [get_counts()], or ignored when `tax` is given.
+#' @param df A tidy table from [get_counts()].
 #' @param tax Optional data frame with rank columns (`kingdom` … `species` or
 #'   `Genus` / `Species`) and a `taxa` column matching `df$taxa`. Row names may
-#'   be used instead of `taxa`.
-#' @param top Integer. Most abundant tips to draw in the ggplot layout.
+#'   be used instead of `taxa`. When `NULL`, genus and species are parsed from
+#'   the taxon labels.
+#' @param top Integer. Most abundant taxa to keep.
 #'
-#' @return A plot object ([ggplot2::ggplot], or the metacoder heat-tree grob).
+#' @return The plot returned by [metacoder::heat_tree].
 #'
 #' @examples
 #' path <- system.file("extdata", package = "aRchiteutis")
 #' df <- get_counts(path, pattern = "m1[12]_", trim_char = "_")
-#' df2heattree(df[df$clade == "S", ], top = 15)
+#' if (requireNamespace("metacoder", quietly = TRUE)) {
+#'   df2heattree(df[df$clade == "S", ], top = 15)
+#' }
 #'
 #' @export
-#' @importFrom rlang .data
 df2heattree <- function(df, tax = NULL, top = 20L) {
-  if (!is.null(tax) && requireNamespace("metacoder", quietly = TRUE)) {
-    return(archi_heattree_metacoder(df, tax))
-  }
-  if (is.null(df)) stop("df2heattree needs a tidy table or metacoder ranks", call. = FALSE)
+  archi_optional("metacoder", "df2heattree")
+  if (is.null(df)) stop("df2heattree needs a tidy table", call. = FALSE)
   df <- df_tidy_drop_unclassified(df)
   means <- dplyr::summarise(df, m = mean(.data$amount), .by = "taxa")
   means <- means[order(-means$m), , drop = FALSE]
   means <- utils::head(means, min(as.integer(top), nrow(means)))
-  tree <- archi_label_tree(means$taxa)
-  lay <- archi_phylo_layout(tree)
-  nodes <- lay$nodes
-  nodes$m <- means$m[match(nodes$label, means$taxa)]
-  nodes$m[is.na(nodes$m)] <- stats::median(means$m)
-  nodes$label[is.na(nodes$label)] <- ""
-  ggplot2::ggplot() +
-    ggplot2::geom_segment(
-      data = lay$edges,
-      ggplot2::aes(x = .data$x, xend = .data$xend, y = .data$y, yend = .data$yend),
-      colour = "grey60", linewidth = 0.3
-    ) +
-    ggplot2::geom_point(
-      data = nodes[nzchar(nodes$label), , drop = FALSE],
-      ggplot2::aes(x = .data$x, y = .data$y, size = .data$m, colour = .data$m)
-    ) +
-    ggplot2::geom_text(
-      data = nodes[nzchar(nodes$label), , drop = FALSE],
-      ggplot2::aes(x = .data$x + 0.08, y = .data$y, label = .data$label),
-      hjust = 0, size = 2.5, fontface = "italic"
-    ) +
-    ggplot2::scale_colour_gradientn(
-      colours = viridis::viridis(256), name = "mean amount"
-    ) +
-    ggplot2::scale_size_continuous(name = "mean amount", range = c(1.5, 6)) +
-    ggplot2::theme_void(base_size = 11) +
-    ggplot2::theme(legend.position = "bottom")
+  if (nrow(means) < 2L) stop("df2heattree needs at least two taxa", call. = FALSE)
+  df <- df[df$taxa %in% means$taxa, , drop = FALSE]
+  obj <- archi_taxmap_abundance(df, tax)
+  ylgnbu <- c(
+    "#FFFFD9", "#EDF8B1", "#C7E9B4", "#7FCDBB", "#41B6C4",
+    "#1D91C0", "#225EA8", "#253494", "#081D58"
+  )
+  rlang::inject(metacoder::heat_tree(
+    obj,
+    node_label = !!quote(taxon_names),
+    node_size = !!quote(n_obs),
+    node_color = !!quote(total),
+    node_color_range = ylgnbu,
+    edge_color_range = ylgnbu,
+    node_size_axis_label = "Taxa",
+    node_color_axis_label = "Mean relative abundance",
+    layout = "davidson-harel",
+    initial_layout = "reingold-tilford"
+  ))
 }
 
-#' metacoder::heat_tree from a rank table plus abundances
+#' Taxmap with per-taxon mean relative abundance
+#'
+#' Relative abundance is the tidy `amount` column (mean across samples stored
+#' as `total`, matching the harness heat tree). `leaf` is the summed relative
+#' abundance.
+#'
 #' @keywords internal
-archi_heattree_metacoder <- function(df, tax) {
-  tax <- as.data.frame(tax, stringsAsFactors = FALSE)
-  if (!"taxa" %in% names(tax)) {
-    tax$taxa <- rownames(tax)
-  }
+archi_taxmap_abundance <- function(df, tax) {
+  tax <- archi_heattree_taxonomy(df, tax)
   rank_cols <- intersect(
     c("kingdom", "phylum", "class", "order", "family", "genus", "species",
       "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"),
     names(tax)
   )
   if (length(rank_cols) < 2L) stop("tax needs at least two rank columns", call. = FALSE)
+  tax <- tax[tax$taxa %in% unique(as.character(df$taxa)), , drop = FALSE]
+  if (nrow(tax) < 2L) stop("Taxonomy and the table share fewer than two taxa", call. = FALSE)
   input <- tax[, rank_cols, drop = FALSE]
-  sample_cols <- character()
-  if (!is.null(df)) {
-    mat <- df_untidy(df, amount_from = "N", drop_unclassified = TRUE)
-    idx <- match(tax$taxa, rownames(mat))
-    abund <- matrix(
-      0, nrow = nrow(tax), ncol = ncol(mat),
-      dimnames = list(NULL, colnames(mat))
-    )
-    matched <- !is.na(idx)
-    abund[matched, ] <- mat[idx[matched], , drop = FALSE]
-    input <- cbind(input, as.data.frame(abund, check.names = FALSE))
-    sample_cols <- colnames(mat)
-  }
+  mat <- df_untidy(df, amount_from = "amount", drop_unclassified = TRUE)
+  idx <- match(tax$taxa, rownames(mat))
+  abund <- matrix(
+    0, nrow = nrow(tax), ncol = ncol(mat),
+    dimnames = list(NULL, colnames(mat))
+  )
+  matched <- !is.na(idx)
+  abund[matched, ] <- mat[idx[matched], , drop = FALSE]
+  input <- cbind(input, as.data.frame(abund, check.names = FALSE))
+  sample_cols <- colnames(mat)
   obj <- metacoder::parse_tax_data(
     input, class_cols = rank_cols, named_by_rank = TRUE
   )
-  if (length(sample_cols)) {
-    obj$data$taxon_counts <- metacoder::calc_taxon_abund(
-      obj, data = "tax_data", cols = sample_cols
-    )
-    obj$data$taxon_counts$total <- rowSums(
-      obj$data$taxon_counts[, setdiff(names(obj$data$taxon_counts), "taxon_id"),
-                            drop = FALSE]
-    )
-    return(rlang::inject(metacoder::heat_tree(
-      obj,
-      node_label = !!quote(taxon_names),
-      node_size = !!quote(total),
-      node_color = !!quote(total),
-      node_color_axis_label = "Total reads",
-      node_size_axis_label = "Total reads",
-      layout = "davidson-harel",
-      initial_layout = "reingold-tilford"
-    )))
+  obj$data$taxon_counts <- metacoder::calc_taxon_abund(
+    obj, data = "tax_data", cols = sample_cols
+  )
+  num_cols <- intersect(sample_cols, names(obj$data$taxon_counts))
+  mat_tc <- as.matrix(obj$data$taxon_counts[, num_cols, drop = FALSE])
+  obj$data$taxon_counts$total <- rowMeans(mat_tc)
+  obj$data$taxon_counts$leaf <- rowSums(mat_tc)
+  obj
+}
+
+#' Rank table for a heat tree, parsed from labels when `tax` is missing
+#' @keywords internal
+archi_heattree_taxonomy <- function(df, tax) {
+  if (is.null(tax)) {
+    labels <- unique(as.character(df$taxa))
+    labels <- labels[!is.na(labels) & nzchar(labels)]
+    genus <- ifelse(grepl(" ", labels), sub(" .*", "", labels), labels)
+    return(data.frame(
+      taxa = labels, genus = genus, species = labels,
+      stringsAsFactors = FALSE
+    ))
   }
-  # heat_tree evaluates these names inside the Taxmap object. Without an
-  # abundance table, n_obs is the number of input taxa under each node.
-  rlang::inject(metacoder::heat_tree(
-    obj,
-    node_label = !!quote(taxon_names),
-    node_size = !!quote(n_obs),
-    node_color = !!quote(n_obs),
-    node_color_axis_label = "Abundance",
-    node_size_axis_label = "Taxa",
-    layout = "davidson-harel",
-    initial_layout = "reingold-tilford"
-  ))
+  tax <- as.data.frame(tax, stringsAsFactors = FALSE)
+  if (!"taxa" %in% names(tax)) tax$taxa <- rownames(tax)
+  tax$taxa <- as.character(tax$taxa)
+  tax
 }

@@ -59,6 +59,7 @@ test_that("terminal rarefaction flags an unsaturated sample using every taxon", 
 })
 
 test_that("beta, UpSet and difftree panels build for two targets", {
+  skip_if_not_installed("ComplexUpset")
   out <- tempfile("archi-report-groups")
   path <- system.file("extdata", package = "aRchiteutis")
   legend <- system.file("extdata", "legend.csv", package = "aRchiteutis")

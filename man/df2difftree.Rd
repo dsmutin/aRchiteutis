@@ -2,15 +2,17 @@
 % Please edit documentation in R/plots_harness.R
 \name{df2difftree}
 \alias{df2difftree}
-\title{Differential abundance tree (ggtree when installed)}
+\title{Differential abundance tree}
 \usage{
 df2difftree(
   df,
   group,
   contrast = NULL,
   max_tips = 20L,
-  layout = c("rectangular", "circular"),
-  tree = NULL
+  layout = c("circular", "rectangular"),
+  tree = NULL,
+  engine = c("ggtree", "metacoder"),
+  tax = NULL
 )
 }
 \arguments{
@@ -24,20 +26,28 @@ change is \code{log2(contrast[2] / contrast[1])}.}
 
 \item{max_tips}{Integer. How many taxa to keep.}
 
-\item{layout}{\code{"rectangular"} or \code{"circular"} (circular needs \pkg{ggtree}).}
+\item{layout}{\code{"circular"} (default, as in the harness) or \code{"rectangular"}.
+Ignored when \code{engine = "metacoder"}.}
 
 \item{tree}{Optional \link[ape:phylo]{ape::phylo}. Tips must match \code{taxa} values. When
-\code{NULL}, a genus/species formula tree is built from the labels.}
+\code{NULL}, a genus/species formula tree is built from the labels. Used only
+by the ggtree engine.}
+
+\item{engine}{\code{"ggtree"} or \code{"metacoder"}.}
+
+\item{tax}{Optional rank table (\code{kingdom} … \code{species}, plus \code{taxa}). Used
+only by the metacoder engine. When \code{NULL}, genus and species are parsed
+from the taxon labels.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Selects the taxa with the largest absolute log2 fold change between two
-groups and draws them on a rank-formula tree. When \pkg{ggtree} is installed
-the tree uses that layout (circular or rectangular, branch lengths dropped)
-and the log2 fold change is a bar at each tip. Otherwise a rectangular
-cladogram plus the same bar is drawn with \pkg{ggplot2}.
+groups. The default engine follows the harness ggtree script: a cladogram
+(\code{branch.length = "none"}, circular unless \code{layout = "rectangular"}) and a
+\link[ggtreeExtra:geom_fruit]{ggtreeExtra::geom_fruit} bar of log2 fold change at each tip. \code{engine = "metacoder"} colours a metacoder heat tree by the same fold change and stops
+when \pkg{metacoder} is not installed.
 }
 \examples{
 path <- system.file("extdata", package = "aRchiteutis")

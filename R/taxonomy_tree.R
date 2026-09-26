@@ -62,9 +62,11 @@ archi_sanitize_tax_df <- function(tax_df, cols) {
 
 #' Build a taxonomy tree from a rank table
 #'
-#' Last formula term is the tip rank. Factors are built with
-#' `as.character` then `factor` before `ape::as.phylo`, which is the harness
-#' rule. Unary nodes collapse; multifurcations stay.
+#' Walks the seven Linnaean columns and keeps every rank as a node, including
+#' unary parents. `ape::as.phylo` on a formula pastes those names into unquoted
+#' Newick, so spaces in a species epithet split the tree and singleton ranks
+#' collapse. Empty ranks still inherit the last classified name so a row always
+#' has seven levels.
 #'
 #' @param lineage_df Data frame with one row per tip and columns among
 #'   `kingdom`, `phylum`, `class`, `order`, `family`, `genus`, `species`.
@@ -86,8 +88,8 @@ ranks_to_tree <- function(lineage_df) {
   missing <- setdiff(ranks, names(df))
   for (rk in missing) df[[rk]] <- NA_character_
   if (!"tip_name" %in% names(df)) {
-    df$tip_name <- ifelse(!is.na(df$species) & nzchar(df$species),
-                          df$species, df$genus)
+    df$tip_name <- ifelse(!is.na(df$species) & nzchar(as.character(df$species)),
+                          as.character(df$species), as.character(df$genus))
   }
   if (!"taxa_id" %in% names(df)) {
     df$taxa_id <- if ("taxid" %in% names(df)) {
@@ -102,29 +104,123 @@ ranks_to_tree <- function(lineage_df) {
   empty <- is.na(last_vals) | !nzchar(last_vals)
   last_vals[empty] <- as.character(df$tip_name)[empty]
   suffix <- if ("taxid" %in% names(df)) df$taxid else df$taxa_id
-  df[[last]] <- archi_uniquify_last_rank(last_vals, suffix)
-  tax_df_phy <- archi_sanitize_tax_df(df, ranks)
-  # Sanitising punctuation can create a second collision (for example
-  # "A (group)" and "A [group]"). Formula-tree tip labels must stay unique so
-  # each one can be mapped back to its requested phyloseq feature id.
-  tax_df_phy[[last]] <- factor(
-    make.unique(as.character(tax_df_phy[[last]]), sep = "_"),
-    levels = unique(make.unique(as.character(tax_df_phy[[last]]), sep = "_"))
-  )
-  form <- stats::as.formula(paste("~", paste(ranks, collapse = " / ")))
-  tr <- ape::as.phylo(data = tax_df_phy, form)
-  last_now <- as.character(tax_df_phy[[last]])
+  df[[last]] <- make.unique(archi_uniquify_last_rank(last_vals, suffix), sep = "_")
   sci <- as.character(df$tip_name)
-  tip_map <- stats::setNames(sci, last_now)
-  keep <- !is.na(tip_map) & nzchar(tip_map)
-  keep <- keep & !(duplicated(names(tip_map)) | duplicated(names(tip_map), fromLast = TRUE))
-  tip_map <- tip_map[keep]
-  tr$tip.label <- ifelse(
-    tr$tip.label %in% names(tip_map),
-    unname(tip_map[tr$tip.label]),
-    tr$tip.label
+  missing_sci <- is.na(sci) | !nzchar(sci)
+  sci[missing_sci] <- as.character(df[[last]])[missing_sci]
+  sci <- make.unique(sci, sep = "_")
+  archi_phylo_from_rank_table(df[, ranks, drop = FALSE], sci)
+}
+
+#' ape phylo from rank columns, keeping unary nodes
+#' @keywords internal
+archi_phylo_from_rank_table <- function(rank_df, tip_labels) {
+  rank_df <- as.data.frame(rank_df, stringsAsFactors = FALSE)
+  n <- nrow(rank_df)
+  if (n != length(tip_labels)) {
+    stop("Rank table and tip labels must have the same length", call. = FALSE)
+  }
+  cols <- names(rank_df)
+  paths <- lapply(seq_len(n), function(i) {
+    vapply(cols, function(rk) {
+      val <- as.character(rank_df[[rk]][i])
+      if (is.na(val) || !nzchar(val)) val <- "Unclassified"
+      paste(rk, val, sep = "=")
+    }, character(1))
+  })
+  archi_phylo_from_rank_paths(paths, as.character(tip_labels))
+}
+
+#' Edge-list taxonomy tree from per-tip rank paths
+#' @keywords internal
+archi_phylo_from_rank_paths <- function(paths, tip_labels) {
+  n_tip <- length(paths)
+  if (n_tip < 2L) stop("Need at least two tips for a taxonomy tree", call. = FALSE)
+  parent <- character()
+  cum_paths <- vector("list", n_tip)
+  for (i in seq_len(n_tip)) {
+    parts <- paths[[i]]
+    keys <- character(length(parts))
+    acc <- ""
+    for (j in seq_along(parts)) {
+      acc <- if (j == 1L) parts[[j]] else paste(acc, parts[[j]], sep = "/")
+      keys[[j]] <- acc
+      par <- if (j == 1L) "" else keys[[j - 1L]]
+      if (!acc %in% names(parent)) parent[acc] <- par
+    }
+    cum_paths[[i]] <- keys
+  }
+  tip_keys <- vapply(cum_paths, function(x) x[[length(x)]], character(1))
+  if (anyDuplicated(tip_keys)) {
+    dup <- duplicated(tip_keys)
+    tip_keys[dup] <- paste0(tip_keys[dup], "#", seq_len(sum(dup)))
+  }
+  roots <- unique(names(parent)[parent == "" | is.na(parent)])
+  if (length(roots) > 1L) {
+    parent["__root__"] <- ""
+    parent[roots] <- "__root__"
+  }
+  all_keys <- unique(c(names(parent), unlist(cum_paths, use.names = FALSE), tip_keys))
+  internal_keys <- setdiff(all_keys, tip_keys)
+  if (!length(internal_keys)) {
+    parent[tip_keys] <- "__root__"
+    parent["__root__"] <- ""
+    internal_keys <- "__root__"
+  }
+  is_root <- vapply(internal_keys, function(k) {
+    par <- unname(parent[k])
+    !length(par) || is.na(par) || !nzchar(par)
+  }, logical(1))
+  internal_keys <- c(internal_keys[is_root], internal_keys[!is_root])
+  id <- c(
+    stats::setNames(seq_len(n_tip), tip_keys),
+    stats::setNames(n_tip + seq_len(length(internal_keys)), internal_keys)
   )
-  tr
+  edge <- do.call(rbind, lapply(names(parent), function(child) {
+    par <- unname(parent[[child]])
+    if (!length(par) || is.na(par) || !nzchar(par)) return(NULL)
+    c(unname(id[[par]]), unname(id[[child]]))
+  }))
+  storage.mode(edge) <- "integer"
+  node_lab <- sub(".*=", "", internal_keys)
+  node_lab[internal_keys == "__root__"] <- "root"
+  structure(
+    list(
+      edge = edge,
+      tip.label = as.character(tip_labels),
+      Nnode = as.integer(length(internal_keys)),
+      node.label = node_lab,
+      edge.length = rep(1, nrow(edge))
+    ),
+    class = "phylo"
+  )
+}
+
+#' Taxonomy tree from a rank table, or genus/species from labels
+#' @param labels Character tip labels that match `tax$taxa` when `tax` is given.
+#' @param tax Optional rank table.
+#' @return An [ape::phylo] object.
+#' @keywords internal
+archi_taxa_tree <- function(labels, tax = NULL) {
+  labels <- unique(as.character(labels))
+  labels <- labels[!is.na(labels) & nzchar(labels)]
+  if (length(labels) < 2L) stop("Need at least two taxa for a taxonomy tree", call. = FALSE)
+  if (is.null(tax)) return(archi_label_tree(labels))
+  tax <- as.data.frame(tax, stringsAsFactors = FALSE)
+  if (!"taxa" %in% names(tax)) tax$taxa <- rownames(tax)
+  names(tax) <- tolower(names(tax))
+  tax$taxa <- as.character(tax$taxa)
+  tax <- tax[tax$taxa %in% labels, , drop = FALSE]
+  ranks <- intersect(archi_rank_cols(), names(tax))
+  if (length(ranks) >= 2L && nrow(tax) >= 2L) {
+    tax$tip_name <- tax$taxa
+    tr <- ranks_to_tree(tax)
+    keep <- intersect(tr$tip.label, labels)
+    if (length(keep) >= 2L) {
+      return(ape::keep.tip(tr, keep, collapse.singles = FALSE))
+    }
+  }
+  archi_label_tree(labels)
 }
 
 #' Parse an NCBI taxonomy efetch XML document

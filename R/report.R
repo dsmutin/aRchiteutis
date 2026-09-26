@@ -223,7 +223,7 @@ archi_report_catalog <- function(beta_method, order_samples, style) {
     heattree = "metacoder heat tree. Node size is the number of taxa; colour is mean relative abundance. Empty ranks are dropped so the taxonomy is one tree. Requires the optional metacoder package.",
     upset = "Taxon presence intersections across target levels, drawn with ComplexUpset. Requires the optional ComplexUpset package.",
     composition_tree = "Fan cladogram (ggtree) with a ggtreeExtra boxplot of relative abundance, coloured by phylum.",
-    difftree = "Log2 fold change between two target levels on a ggtree layout. The default fruit is a heatmap of relative abundance; tip colour is the fold change. engine = \"metacoder\" uses metacoder::heat_tree and requires the optional metacoder package. engine = \"microbiota\" uses MicrobiotaProcess::mp_diff_analysis and requires the optional MicrobiotaProcess package."
+    difftree = "Log2 fold change between two target levels on a seven-rank ggtree. The default heatmap is ggtree::gheatmap of relative abundance; tip colour is the fold change. engine = \"metacoder\" uses metacoder::heat_tree and requires the optional metacoder package. engine = \"microbiota\" uses MicrobiotaProcess::mp_diff_analysis and requires the optional MicrobiotaProcess package."
   )
 }
 
@@ -261,7 +261,8 @@ archi_report_draw <- function(id, df, tax, target_col, beta_method, order_sample
     heattree = df2heattree(trimmed, tax = tax, top = top),
     upset = df2upset(df, group = "target"),
     difftree = df2difftree(
-      df, group = "target", contrast = contrast, max_tips = min(20L, top)
+      df, group = "target", contrast = contrast, max_tips = min(20L, top),
+      tax = tax
     ),
     stop("Unknown plot id: ", id, call. = FALSE)
   )

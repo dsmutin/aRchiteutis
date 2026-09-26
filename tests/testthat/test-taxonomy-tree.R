@@ -12,7 +12,7 @@ test_that("NCBI efetch XML becomes a rank-formula tree", {
   expect_true(all(c("Escherichia coli", "Lactobacillus") %in% tr$tip.label))
 })
 
-test_that("rank formula keeps a multifurcation and is not a binary hclust", {
+test_that("rank formula keeps a multifurcation and seven nested ranks", {
   df <- data.frame(
     kingdom = c("Bacteria", "Bacteria", "Bacteria", "Bacteria", "Archaea"),
     phylum = c("Pseudomonadota", "Pseudomonadota", "Pseudomonadota",
@@ -32,7 +32,12 @@ test_that("rank formula keeps a multifurcation and is not a binary hclust", {
   expect_equal(ape::Ntip(tr), 5L)
   kids <- table(tr$edge[, 1])
   expect_true(any(kids > 2L))
-  expect_lt(max(ape::node.depth(tr)), 8)
+  expect_equal(max(ape::node.depth.edgelength(tr)), 7)
+  expect_setequal(tr$tip.label, df$species)
+  expect_lt(ape::Nnode(tr), 40L)
+  expect_gt(ape::Nnode(tr), 5L)
+  expect_true("Bacteria" %in% tr$node.label)
+  expect_true("Escherichia" %in% tr$node.label)
 })
 
 test_that("sanitised rank labels map back to exact feature ids", {

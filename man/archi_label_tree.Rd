@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots_harness.R
 \name{archi_label_tree}
 \alias{archi_label_tree}
-\title{Rank-formula tree for a set of binomial (or single-word) tip labels}
+\title{Genus/species tree for binomial (or single-word) tip labels}
 \usage{
 archi_label_tree(labels)
 }
@@ -13,7 +13,7 @@ archi_label_tree(labels)
 An \link[ape:phylo]{ape::phylo} object.
 }
 \description{
-Uses the harness rule: \code{ape::as.phylo(~genus/species)} with factors, not an
-\code{hclust} dendrogram.
+Fallback when no rank table is passed. Spaces in an epithet are kept as
+labels; they are not pasted into Newick. Not an \code{hclust} dendrogram.
 }
 \keyword{internal}

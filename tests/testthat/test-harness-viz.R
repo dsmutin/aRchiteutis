@@ -20,6 +20,7 @@ test_that("differential tree uses a rank formula, not a binary hclust", {
   expect_builds(p)
   tr <- archi_label_tree(c("Escherichia coli", "Escherichia fergusonii", "Bacillus subtilis"))
   expect_s3_class(tr, "phylo")
+  expect_equal(ape::Ntip(tr), 3L)
   expect_lt(max(ape::node.depth(tr)), 20)
   expect_true(any(lengths(split(tr$edge[, 2], tr$edge[, 1])) > 2) ||
                 ape::Ntip(tr) == 3)
@@ -35,6 +36,32 @@ test_that("differential tree uses a rank formula, not a binary hclust", {
     sp, group = "three_groups", contrast = c("a", "b"), max_tips = 8
   ))
   expect_builds(df2difftree(sp, group = "stage", max_tips = 8, fruit = "bar"))
+})
+
+test_that("difftree heatmap uses gheatmap on a seven-rank tax tree", {
+  skip_if_not_installed("ggtree")
+  df <- archi_df()
+  sp <- df[df$clade == "S", ]
+  taxa <- unique(as.character(sp$taxa))
+  taxa <- taxa[seq_len(min(8L, length(taxa)))]
+  sp <- sp[sp$taxa %in% taxa, ]
+  tax <- data.frame(
+    taxa = taxa,
+    kingdom = "Bacteria",
+    phylum = rep(c("Bacillota", "Pseudomonadota"), length.out = length(taxa)),
+    class = rep(c("Bacilli", "Gammaproteobacteria"), length.out = length(taxa)),
+    order = rep(c("Lactobacillales", "Enterobacterales"), length.out = length(taxa)),
+    family = taxa,
+    genus = taxa,
+    species = taxa,
+    stringsAsFactors = FALSE
+  )
+  tr <- archi_taxa_tree(taxa, tax)
+  expect_gte(max(ape::node.depth.edgelength(tr)), 6)
+  p <- df2difftree(sp, group = "stage", max_tips = 8, tax = tax)
+  expect_builds(p)
+  geoms <- vapply(p$layers, function(layer) class(layer$geom)[[1]], character(1))
+  expect_true(any(geoms %in% c("GeomTile", "GeomRect")))
 })
 
 test_that("heat tree and upset plots build on the bundled reports", {

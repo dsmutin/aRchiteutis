@@ -7,10 +7,9 @@
 archi_difftree_ggtree(tree, lfc, layout, df, groups, fruit)
 }
 \description{
-Default fruit is a heatmap of relative abundance (samples in the two
-groups, or the two group means when there are many samples). Tip colour is
-log2 fold change. \code{fruit = "bar"} keeps a single fold-change column.
-ggtreeExtra looks geoms up with \code{do.call} inside its own namespace, so the
-layer is built from the imported \code{geom_text} name and then swapped.
+Default fruit is a \link[ggtree:gheatmap]{ggtree::gheatmap} of relative abundance (samples in
+the two groups, or the two group means when there are many samples), drawn
+outside one \link[ggtree:geom_tiplab]{ggtree::geom_tiplab}. Tip colour is log2 fold change.
+\code{fruit = "bar"} keeps a single fold-change column.
 }
 \keyword{internal}

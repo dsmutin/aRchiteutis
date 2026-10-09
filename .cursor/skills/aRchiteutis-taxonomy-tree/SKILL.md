@@ -21,4 +21,4 @@ lineage <- taxids_to_lineage(c(562, 1578), xml = xml)
 tr <- ranks_to_tree(lineage)
 ```
 
-The tree is `ape::as.phylo(~kingdom/phylum/class/order/family/genus/species)`. It is not an NCBI parent-id graph and not `hclust`. Empty ranks are filled with the last classified name. Pass the phylo object to `df2difftree(..., tree = tr)` or `phyloseq::phy_tree<-`.
+The tree walks `kingdom/phylum/class/order/family/genus/species` and keeps unary rank nodes, so a full lineage stays seven levels deep. It is not an NCBI parent-id graph and not `hclust`. Empty ranks are filled with the last classified name. Pass the phylo object to `df2difftree(..., tree = tr)` or `phyloseq::phy_tree<-`.

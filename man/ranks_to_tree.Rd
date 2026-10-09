@@ -15,9 +15,11 @@ Optional \code{taxa_id}, \code{taxid}, and \code{tip_name}.}
 An \link[ape:phylo]{ape::phylo} object.
 }
 \description{
-Last formula term is the tip rank. Factors are built with
-\code{as.character} then \code{factor} before \code{ape::as.phylo}, which is the harness
-rule. Unary nodes collapse; multifurcations stay.
+Walks the seven Linnaean columns and keeps every rank as a node, including
+unary parents. \code{ape::as.phylo} on a formula pastes those names into unquoted
+Newick, so spaces in a species epithet split the tree and singleton ranks
+collapse. Empty ranks still inherit the last classified name so a row always
+has seven levels.
 }
 \examples{
 lineage <- read.delim(

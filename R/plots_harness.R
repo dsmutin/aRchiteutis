@@ -239,10 +239,10 @@ archi_group_lfc <- function(df, group, contrast = NULL) {
   )
 }
 
-#' Rank-formula tree for a set of binomial (or single-word) tip labels
+#' Genus/species tree for binomial (or single-word) tip labels
 #'
-#' Uses the harness rule: `ape::as.phylo(~genus/species)` with factors, not an
-#' `hclust` dendrogram.
+#' Fallback when no rank table is passed. Spaces in an epithet are kept as
+#' labels; they are not pasted into Newick. Not an `hclust` dendrogram.
 #'
 #' @param labels Character tip labels.
 #' @return An [ape::phylo] object.
@@ -254,10 +254,10 @@ archi_label_tree <- function(labels) {
   species <- labels
   dup <- duplicated(species) | duplicated(species, fromLast = TRUE)
   if (any(dup)) species[dup] <- paste0(species[dup], " [", seq_len(sum(dup)), "]")
-  tax <- data.frame(genus = factor(genus), species = factor(species))
-  tr <- ape::as.phylo(data = tax, ~ genus / species)
-  # Tip labels from as.phylo are the species factor levels.
-  tr
+  archi_phylo_from_rank_table(
+    data.frame(genus = genus, species = species, stringsAsFactors = FALSE),
+    labels
+  )
 }
 
 
@@ -274,8 +274,8 @@ archi_optional <- function(pkg, what) {
 #' Selects the taxa with the largest absolute log2 fold change between two
 #' groups. The default engine is a \pkg{ggtree} cladogram
 #' (`branch.length = "none"`, circular unless `layout = "rectangular"`) with a
-#' [ggtreeExtra::geom_fruit] heatmap of relative abundance at each tip. Tip
-#' colour is the log2 fold change. `fruit = "bar"` restores the single
+#' [ggtree::gheatmap] of relative abundance at each tip. Tip colour is the
+#' log2 fold change. `fruit = "bar"` restores a [ggtreeExtra::geom_fruit]
 #' fold-change column. `engine = "metacoder"` colours a metacoder heat tree by
 #' the same fold change and stops when \pkg{metacoder} is not installed.
 #' `engine = "microbiota"` runs \pkg{MicrobiotaProcess} `mp_diff_analysis` and
@@ -291,13 +291,13 @@ archi_optional <- function(pkg, what) {
 #' @param layout `"circular"` (default) or `"rectangular"`. Ignored when
 #'   `engine` is `"metacoder"` or `"microbiota"`.
 #' @param tree Optional [ape::phylo]. Tips must match `taxa` values. When
-#'   `NULL`, a genus/species formula tree is built from the labels. Used only
-#'   by the ggtree engine.
+#'   `NULL`, a seven-rank tree is built from `tax`, or a genus/species tree
+#'   from the labels. Used only by the ggtree engine.
 #' @param engine `"ggtree"`, `"metacoder"`, or `"microbiota"`.
 #' @param fruit `"heatmap"` (default) or `"bar"`. Used only by the ggtree engine.
 #' @param tax Optional rank table (`kingdom` … `species`, plus `taxa`). Used
-#'   by the metacoder and microbiota engines. When `NULL`, genus and species
-#'   are parsed from the taxon labels.
+#'   by the ggtree, metacoder and microbiota engines. When `NULL`, genus and
+#'   species are parsed from the taxon labels.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -334,46 +334,49 @@ df2difftree <- function(df, group, contrast = NULL, max_tips = 20L,
   }
 
   if (is.null(tree)) {
-    tree <- archi_label_tree(lfc$id)
+    tree <- archi_taxa_tree(lfc$id, tax)
   } else {
-    tree <- ape::keep.tip(tree, intersect(tree$tip.label, lfc$id))
+    tree <- ape::keep.tip(tree, intersect(tree$tip.label, lfc$id),
+                          collapse.singles = FALSE)
   }
   keep <- intersect(lfc$id, tree$tip.label)
   lfc <- lfc[match(keep, lfc$id), , drop = FALSE]
   if (nrow(lfc) < 2L) stop("Tree and taxa share fewer than two tips", call. = FALSE)
-  tree <- ape::keep.tip(tree, lfc$id)
+  tree <- ape::keep.tip(tree, lfc$id, collapse.singles = FALSE)
   groups <- archi_sample_group(df, group, unique(as.character(df$sample)))
   archi_difftree_ggtree(tree, lfc, layout, df, groups, fruit)
 }
 
 #' ggtree differential tree
 #'
-#' Default fruit is a heatmap of relative abundance (samples in the two
-#' groups, or the two group means when there are many samples). Tip colour is
-#' log2 fold change. `fruit = "bar"` keeps a single fold-change column.
-#' ggtreeExtra looks geoms up with `do.call` inside its own namespace, so the
-#' layer is built from the imported `geom_text` name and then swapped.
+#' Default fruit is a [ggtree::gheatmap] of relative abundance (samples in
+#' the two groups, or the two group means when there are many samples), drawn
+#' outside one [ggtree::geom_tiplab]. Tip colour is log2 fold change.
+#' `fruit = "bar"` keeps a single fold-change column.
 #'
 #' @keywords internal
 archi_difftree_ggtree <- function(tree, lfc, layout, df, groups, fruit) {
   lim <- max(abs(lfc$log2_lfc), na.rm = TRUE)
   if (!is.finite(lim) || lim <= 0) lim <- 1
   is_circ <- identical(layout, "circular")
-  tip_offset <- if (is_circ) 0.35 else 0.15
+  tree_span <- max(ape::node.depth.edgelength(tree), na.rm = TRUE)
+  if (!is.finite(tree_span) || tree_span <= 0) tree_span <- 1
   fruit_offset <- if (is_circ) 0.08 else 0.05
-  fruit_pwidth <- if (identical(fruit, "heatmap")) {
-    if (is_circ) 0.55 else 0.45
+  fruit_pwidth <- if (is_circ) 0.35 else 0.40
+  heat_offset <- 0.08
+  heat_width <- if (is_circ) 0.4 else 0.3
+  tip_offset <- if (identical(fruit, "heatmap")) {
+    tree_span * heat_width + heat_offset + 0.2
   } else if (is_circ) {
-    0.35
+    0.15
   } else {
-    0.40
+    0.12
   }
 
   display <- as.character(lfc$id)
   tip_meta <- data.frame(
     label = display,
     display = display,
-    is_italic = grepl(" ", display, fixed = TRUE),
     log2_lfc = as.numeric(lfc$log2_lfc),
     stringsAsFactors = FALSE
   )
@@ -389,22 +392,12 @@ archi_difftree_ggtree <- function(tree, lfc, layout, df, groups, fruit) {
   p <- p + ggtree::geom_tippoint(
     ggplot2::aes(color = log2_lfc), size = 1.6, show.legend = TRUE
   )
-  if (any(tip_meta$is_italic)) {
-    p <- p + ggtree::geom_tiplab(
-      ggplot2::aes(label = display, subset = is_italic),
-      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1,
-      fontface = "italic"
-    )
-  }
-  if (any(!tip_meta$is_italic)) {
-    p <- p + ggtree::geom_tiplab(
-      ggplot2::aes(label = display, subset = !is_italic),
-      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1,
-      fontface = "plain"
-    )
-  }
 
   if (identical(fruit, "bar")) {
+    p <- p + ggtree::geom_tiplab(
+      ggplot2::aes(label = display),
+      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1
+    )
     bars <- data.frame(
       id = display,
       lfc = as.numeric(lfc$log2_lfc),
@@ -422,17 +415,22 @@ archi_difftree_ggtree <- function(tree, lfc, layout, df, groups, fruit) {
         midpoint = 0, limits = c(-lim, lim), name = "log2 LFC"
       )
   } else {
-    heat <- archi_difftree_heat(df, groups, lfc)
-    p <- p +
-      archi_geom_fruit(
-        data = heat,
-        mapping = ggplot2::aes(y = id, x = sample, fill = amount),
-        offset = fruit_offset,
-        pwidth = fruit_pwidth,
-        geom = ggplot2::geom_tile,
-        geomname = "geom_tile"
-      ) +
-      ggplot2::scale_fill_viridis_c(name = "Relative abundance", option = "cividis")
+    heat <- archi_difftree_heat_matrix(df, groups, lfc)
+    p <- suppressMessages(ggtree::gheatmap(
+      p, heat,
+      offset = heat_offset,
+      width = heat_width,
+      colnames_angle = 90,
+      colnames_offset_y = 0.25,
+      font.size = 2
+    ))
+    p <- p + ggplot2::scale_fill_viridis_c(
+      option = "A", name = "Relative abundance"
+    )
+    p <- p + ggtree::geom_tiplab(
+      ggplot2::aes(label = display),
+      size = 2.2, offset = tip_offset, align = TRUE, linesize = 0.1
+    )
   }
   p <- p +
     ggplot2::scale_color_gradient2(
@@ -440,10 +438,8 @@ archi_difftree_ggtree <- function(tree, lfc, layout, df, groups, fruit) {
       midpoint = 0, limits = c(-lim, lim), name = "log2 LFC"
     ) +
     ggplot2::theme(legend.position = "right")
-  if (is_circ) {
-    p <- p + ggplot2::expand_limits(x = c(0, 4))
-  } else if (requireNamespace("ggtree", quietly = TRUE) &&
-             exists("hexpand", envir = asNamespace("ggtree"), inherits = FALSE)) {
+  if (!is_circ && requireNamespace("ggtree", quietly = TRUE) &&
+      exists("hexpand", envir = asNamespace("ggtree"), inherits = FALSE)) {
     p <- p + ggtree::hexpand(0.85)
   }
   p
@@ -471,6 +467,27 @@ archi_difftree_heat <- function(df, groups, lfc) {
     amount = as.numeric(heat$amount),
     stringsAsFactors = FALSE
   )
+}
+
+#' Wide taxa-by-sample matrix for [ggtree::gheatmap]
+#' @keywords internal
+archi_difftree_heat_matrix <- function(df, groups, lfc) {
+  heat <- archi_difftree_heat(df, groups, lfc)
+  wide <- tidyr::pivot_wider(
+    heat, names_from = "sample", values_from = "amount", values_fill = 0
+  )
+  mat <- as.data.frame(wide[, setdiff(names(wide), "id"), drop = FALSE],
+                       stringsAsFactors = FALSE)
+  rownames(mat) <- as.character(wide$id)
+  missing <- setdiff(as.character(lfc$id), rownames(mat))
+  if (length(missing)) {
+    extra <- as.data.frame(
+      matrix(0, length(missing), ncol(mat), dimnames = list(missing, names(mat))),
+      stringsAsFactors = FALSE
+    )
+    mat <- rbind(mat, extra)
+  }
+  mat[as.character(lfc$id), , drop = FALSE]
 }
 
 #' ggplot2 4 renamed is.waive; released ggtree still calls it while drawing

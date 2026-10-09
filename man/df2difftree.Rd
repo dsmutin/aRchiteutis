@@ -31,16 +31,16 @@ change is \code{log2(contrast[2] / contrast[1])}.}
 \code{engine} is \code{"metacoder"} or \code{"microbiota"}.}
 
 \item{tree}{Optional \link[ape:phylo]{ape::phylo}. Tips must match \code{taxa} values. When
-\code{NULL}, a genus/species formula tree is built from the labels. Used only
-by the ggtree engine.}
+\code{NULL}, a seven-rank tree is built from \code{tax}, or a genus/species tree
+from the labels. Used only by the ggtree engine.}
 
 \item{engine}{\code{"ggtree"}, \code{"metacoder"}, or \code{"microbiota"}.}
 
 \item{fruit}{\code{"heatmap"} (default) or \code{"bar"}. Used only by the ggtree engine.}
 
 \item{tax}{Optional rank table (\code{kingdom} … \code{species}, plus \code{taxa}). Used
-by the metacoder and microbiota engines. When \code{NULL}, genus and species
-are parsed from the taxon labels.}
+by the ggtree, metacoder and microbiota engines. When \code{NULL}, genus and
+species are parsed from the taxon labels.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -49,8 +49,8 @@ A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 Selects the taxa with the largest absolute log2 fold change between two
 groups. The default engine is a \pkg{ggtree} cladogram
 (\code{branch.length = "none"}, circular unless \code{layout = "rectangular"}) with a
-\link[ggtreeExtra:geom_fruit]{ggtreeExtra::geom_fruit} heatmap of relative abundance at each tip. Tip
-colour is the log2 fold change. \code{fruit = "bar"} restores the single
+\link[ggtree:gheatmap]{ggtree::gheatmap} of relative abundance at each tip. Tip colour is the
+log2 fold change. \code{fruit = "bar"} restores a \link[ggtreeExtra:geom_fruit]{ggtreeExtra::geom_fruit}
 fold-change column. \code{engine = "metacoder"} colours a metacoder heat tree by
 the same fold change and stops when \pkg{metacoder} is not installed.
 \code{engine = "microbiota"} runs \pkg{MicrobiotaProcess} \code{mp_diff_analysis} and

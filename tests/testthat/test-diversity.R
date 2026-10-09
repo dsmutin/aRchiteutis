@@ -48,6 +48,8 @@ test_that("df2beta_bray is a Bray-Curtis wrapper around df2beta", {
 })
 
 test_that("beta methods cover vegan distances and Aitchison aDist", {
+  skip_if_not_installed("vegan")
+  skip_if_not_installed("robCompositions")
   g <- archi_df()
   g <- g[g$clade == "G", ]
   expect_true("aitchison" %in% archi_beta_methods())

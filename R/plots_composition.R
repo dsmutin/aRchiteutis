@@ -309,8 +309,7 @@ archi_composition_tree <- function(df, tax, color_rank) {
     color_rank <- if ("genus" %in% names(tax)) "genus" else ranks[[length(ranks)]]
   }
   if (length(ranks) >= 2L && nrow(tax) >= 2L) {
-    tax$tip_name <- tax$taxa
-    tree <- ranks_to_tree(tax)
+    tree <- archi_taxa_tree(intersect(labels, tax$taxa), tax)
   } else {
     tree <- archi_label_tree(intersect(labels, tax$taxa))
   }

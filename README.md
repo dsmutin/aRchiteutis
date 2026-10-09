@@ -116,7 +116,7 @@ Figures below are rendered from the bundled honey-bee brood reports.
 
 <img src="img/heattree.png" alt="Taxonomic heat tree" width="720">
 
-`df2difftree()` — log2 fold change between two groups on a ggtree layout. The default fruit is a heatmap of relative abundance; tip colour is the fold change. `fruit = "bar"` draws the fold change as a column. With more than two groups, pass `contrast`. `engine = "metacoder"` draws `metacoder::heat_tree` and stops when that package is not installed. `engine = "microbiota"` runs MicrobiotaProcess `mp_diff_analysis` and stops when that package is not installed.
+`df2difftree()` — log2 fold change between two groups on a seven-rank ggtree. The default heatmap is `ggtree::gheatmap` of relative abundance; tip colour is the fold change. `fruit = "bar"` draws the fold change as a column. Pass `tax` so the tree uses the same ranks as `df2heattree`. With more than two groups, pass `contrast`. `engine = "metacoder"` draws `metacoder::heat_tree` and stops when that package is not installed. `engine = "microbiota"` runs MicrobiotaProcess `mp_diff_analysis` and stops when that package is not installed.
 
 <img src="img/difftree.png" alt="Differential abundance tree" width="720">
 
